@@ -50,8 +50,8 @@ small { font-size: 12.5px; } .sm { font-size: 13px; } .lead { font-size: 16px; m
 .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: .06em; padding: 0 8px; }
 .logo.big { font-size: 30px; } .logo.sm { font-size: 17px; padding: 0; }
 .logo-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); position: relative; flex: none; }
-.logo-mark::after { content: ""; position: absolute; inset: 7px 6px 7px 6px; border-radius: 3px; background: var(--on-accent); clip-path: polygon(0 0,100% 0,100% 30%,40% 30%,40% 48%,85% 48%,85% 72%,40% 72%,40% 100%,0 100%); }
-.logo.big .logo-mark { width: 36px; height: 36px; border-radius: 11px; } .logo.big .logo-mark::after { inset: 9px 8px; }
+.logo-mark::after { content: ""; position: absolute; inset: 4.5px 6.5px 4.5px 7.5px; background: var(--on-accent); clip-path: polygon(0 0,100% 0,100% 25%,39% 25%,39% 41%,84% 41%,84% 63%,39% 63%,39% 100%,0 100%); }
+.logo.big .logo-mark { width: 36px; height: 36px; border-radius: 11px; } .logo.big .logo-mark::after { inset: 6px 9px 6px 10.5px; }
 .sync { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
 .sync i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
 .sync.busy i { background: var(--warn); animation: pulse 1s infinite; }
