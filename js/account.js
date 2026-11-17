@@ -125,7 +125,7 @@ async function supaLoad() {
     docs = await Supa.fetchDocs(Store.uid);
     pending.forEach((k) => { const v = UCache.read(k); if (v === undefined) delete docs[k]; else docs[k] = v; }); // неотправленные правки главнее
     UCache.replaceAll(docs); pending.forEach((k) => UCache.write(k, docs[k] === undefined ? { del: true } : { value: docs[k] }));
-    setTimeout(() => { supaRetry(); Supa.afterLogin(); }, 1500);
+    setTimeout(() => { supaRetry(); Supa.afterLogin(); supaHealthRefresh(); }, 1500);
   } catch (e) {
     console.warn('supa load', e); docs = UCache.all(); Store.offline = true;
     Store.cloudNote = 'Нет связи с облаком — показываю данные с этого устройства. Изменения отправятся, когда появится интернет.';
@@ -145,6 +145,21 @@ function supaFlush(key, job) {
     })
     .finally(() => { Store.saving--; syncState(); });
 }
+/* Свежие шаги из «Здоровья»: при запуске, при возврате в приложение и каждые 5 минут, пока оно открыто */
+async function supaHealthRefresh() {
+  if (Store.backend !== 'supa' || !Supa.client || !Supa.user || navigator.onLine === false) return;
+  try {
+    const from = 'health-' + addDays(todayISO(), -14);
+    const { data, error } = await withTimeout(Supa.client.from('docs').select('key,data').eq('user_id', Store.uid).gte('key', from).lte('key', 'health-9'), 15000);
+    if (error) throw error;
+    let fresh = false;
+    (data || []).forEach((r) => { if (!/^health-\d/.test(r.key)) return; const old = D.health[r.key.slice(7)]; if (!old || old.at !== r.data.at) { D.health[r.key.slice(7)] = r.data; fresh = true; } });
+    if (fresh && applyHealthSteps() && !Sheet.stack.length) render();
+    else if (fresh && App.page === 'steps' && !Sheet.stack.length) render();
+  } catch (e) { console.warn('health refresh', e); }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(supaHealthRefresh, 800); });
+setInterval(() => { if (document.visibilityState === 'visible') supaHealthRefresh(); }, 5 * 60 * 1000);
 async function supaRetry() {
   if (Store.backend !== 'supa') return;
   if (!Supa.client) { try { await Supa.lib(); const u = await Supa.session(); if (!u || u.offline) return; } catch (e) { return; } }

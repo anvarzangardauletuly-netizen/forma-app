@@ -518,3 +518,6 @@ p.center, .muted.center { text-align: center; }
 .oil-custom { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--muted); } .oil-custom .input { width: 90px; }
 .oil-box .row > b { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 .oil-box select.oil-type { font-size: 13px !important; height: 32px !important; width: auto !important; min-width: 0; padding: 0 8px; border-radius: 10px; }
+details > summary { cursor: pointer; list-style: none; padding: 6px 0; } details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸ "; color: var(--muted); } details[open] > summary::before { content: "▾ "; }
+.banner.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }

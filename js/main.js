@@ -106,6 +106,7 @@ async function boot() {
       if ((Store.migrated || []).length) setTimeout(() => toast(`Перенесено в облако из этого браузера: ${Store.migrated.length} записей${days ? `, в т.ч. ${days} дн. дневника` : ''}. Теперь они видны на всех устройствах.`, 'ok', 7000), 800);
     }
   } catch (e) { console.error(e); toast('Не удалось загрузить данные', 'err'); }
+  try { applyHealthSteps(); } catch (e) { console.warn(e); }
   applyTheme(); booted = true;
   $('#splash').classList.add('hide'); setTimeout(() => $('#splash') && $('#splash').remove(), 500);
   route();

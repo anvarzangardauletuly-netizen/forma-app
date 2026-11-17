@@ -258,7 +258,7 @@ function mergeDoc(k, c, l) {
   if (k === 'programs' || k === 'exlib') { c.list = unionBy(c.list, l.list, 'id'); return c; }
   if (k === 'meta') { c.favorites = [...new Set([...(c.favorites || []), ...(l.favorites || [])])]; c.recent = [...new Set([...(c.recent || []), ...(l.recent || [])])].slice(0, 40); return c; }
   if (k === 'plan') { c.days = Object.assign({}, l.days || {}, c.days || {}); c.shop = Object.assign({}, l.shop || {}, c.shop || {}); return c; }
-  if (k === 'active') return c;
+  if (k === 'active' || k.startsWith('health')) return c;
   return null; // profile, продукты, рецепты, тренировки с тем же id — облачная версия главнее
 }
 function syncState() {
@@ -279,7 +279,7 @@ window.addEventListener('pagehide', () => Store.flushAll());
 const D = {
   profile: null, meta: { favorites: [], recent: [] }, weights: { entries: [] }, programs: { list: [] },
   exlib: { list: [] }, plan: { days: {}, shop: {} }, active: null,
-  days: {}, foods: {}, recipes: {}, workouts: {},
+  days: {}, foods: {}, recipes: {}, workouts: {}, health: {}, 'health-token': null,
 };
 function hydrate(docs) {
   Object.entries(docs).forEach(([k, v]) => {
@@ -294,6 +294,8 @@ function hydrate(docs) {
     else if (k.startsWith('food-')) D.foods[k.slice(5)] = v;
     else if (k.startsWith('recipe-')) D.recipes[k.slice(7)] = v;
     else if (k.startsWith('wo-')) D.workouts[k.slice(3)] = v;
+    else if (k === 'health-token') D['health-token'] = v;
+    else if (k.startsWith('health-')) D.health[k.slice(7)] = v; // шаги из «Здоровья» (пишет сервер)
   });
 }
 function docsFromState() {
@@ -346,6 +348,23 @@ function dayWater(day) {
   MEALS.forEach((m) => (day.meals && day.meals[m.id] || []).forEach((it) => { if (isWaterItem(it)) w += +it.g || 0; }));
   return w;
 }
+/* Шаги из «Здоровья» (iPhone → «Команды» → сервер → документ health-ДАТА) переносим в дневник.
+   Берём их, если за день шагов нет, они тоже из «Здоровья» или в «Здоровье» больше. */
+function applyHealthSteps() {
+  let changed = false;
+  Object.entries(D.health || {}).forEach(([date, h]) => {
+    if (!h || !Number.isFinite(+h.steps)) return;
+    const cur = D.days[date]; const n = +h.steps;
+    if (cur && cur.steps === n) return;
+    if (!cur || cur.steps == null || cur.stepsSrc === 'health' || n > cur.steps) {
+      const d = ensureDay(date); d.steps = n; d.stepsSrc = 'health';
+      if ((d.stepsRun || 0) > n) { d.stepsRun = n; d.kmRun = null; }
+      saveDay(date); changed = true;
+    }
+  });
+  return changed;
+}
+function lastHealthSync() { const v = Object.values(D.health || {}).filter((h) => h && h.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0]; return v || null; }
 function dayHasFood(day) { return MEALS.some((m) => (day.meals[m.id] || []).length); }
 
 function curWeight() {

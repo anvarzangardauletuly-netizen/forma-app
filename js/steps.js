@@ -232,6 +232,59 @@ ACT.stepsPasteSave = validated((f) => { const v = readNum(f, 'steps', { min: 0, 
 ACT.stepsLinkCopy = () => copyText(location.origin + location.pathname + '#steps?n=');
 
 /* ------------------------------------------------------------
+   Автосинхронизация шагов из «Здоровья» (iPhone): «Команды» по расписанию
+   открывают личную ссылку → функция Supabase health-steps → документ health-ДАТА.
+   ------------------------------------------------------------ */
+const healthFn = () => SUPA_URL + '/functions/v1/health-steps'; // SUPA_URL объявлен в account.js (грузится позже)
+function healthTokenLocal() { try { return localStorage.getItem(LS + 'healthToken:' + Store.uid) || ''; } catch (e) { return ''; } }
+function healthLink(t) { return `${healthFn()}?t=${t}&n=`; }
+function healthSyncHTML(ios) {
+  const signed = Store.backend === 'supa' && Supa.user;
+  const doc = D['health-token']; const tok = healthTokenLocal(); const last = lastHealthSync();
+  const lastTxt = last ? `Последнее обновление: ${fmtDate(last.date).toLowerCase()}, ${new Date(last.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} — ${fmt(last.steps)} шагов` : 'Данных из «Здоровья» пока не было.';
+  let body;
+  if (!signed) body = `<p class="muted">Шаги из «Здоровья» приходят через ваш аккаунт FORMA. Войдите в аккаунт (Профиль → «Войти»), и здесь появится настройка.</p>`;
+  else if (doc && tok) body = `
+    <div class="banner ${last ? 'ok' : 'info'}">${ic(last ? 'check' : 'info', 18)}<div>${lastTxt}<br><small class="muted">FORMA сама подтягивает шаги при открытии и каждые 5 минут.</small></div></div>
+    <p class="mt12"><b>Ваша личная ссылка</b> <small class="muted">— никому её не отправляйте</small></p>
+    <div class="row gap8"><input class="input mono sm grow" readonly value="${esc(healthLink(tok))}" data-k="hl"><button class="btn sm primary" data-act="healthCopy">${ic('copy', 16)}Копировать</button></div>
+    <details class="mt12" ${last ? '' : 'open'}><summary><b>Как настроить на iPhone (один раз, ~3 минуты)</b></summary>
+    <ol class="steps-list">
+      <li>Нажмите «Копировать» выше.</li>
+      <li>Откройте приложение <b>«Команды»</b> → вкладка «Команды» → <b>«+»</b>.</li>
+      <li>«Добавить действие» → найдите <b>«Найти образцы здоровья»</b>. Нажмите «Тип» → <b>«Шаги»</b>. Добавьте фильтр <b>«Дата начала»</b> → <b>«Сегодня»</b>.</li>
+      <li>Добавьте действие <b>«Вычислить статистику»</b> → выберите <b>«Сумма»</b>.</li>
+      <li>Добавьте действие <b>«Получить содержимое URL»</b>. В поле адреса вставьте скопированную ссылку, поставьте курсор в самый конец (после <span class="mono">n=</span>) и над клавиатурой нажмите <b>«Статистика»</b>.</li>
+      <li>Назовите команду <b>«Шаги FORMA»</b> и нажмите ▶. Разрешите доступ к «Здоровью». Если всё верно, появится «FORMA: … шагов сохранено».</li>
+      <li>Вкладка <b>«Автоматизация»</b> → <b>«+»</b> → <b>«Время суток»</b> → например, 12:00, «Ежедневно» → <b>«Запускать сразу»</b> → «Далее» → выберите «Шаги FORMA». Сделайте так же на 18:00 и 23:50 — шаги будут обновляться несколько раз в день, а последний запуск сохранит итог дня.</li>
+    </ol></details>
+    <button class="btn ghost sm mt12" data-act="healthCreate">Создать новую ссылку</button>
+    <p class="muted sm">Новая ссылка отключает старую — тогда вставьте её в команду заново.</p>`;
+  else body = `
+    <p class="muted">iPhone считает шаги весь день сам — даже без интернета и когда FORMA закрыта. Подключите «Здоровье» один раз, и шаги будут сами появляться здесь несколько раз в день.</p>
+    ${doc ? '<div class="banner warn mt12">Ссылка уже создана на другом устройстве. Можно создать новую здесь — старая перестанет работать.</div>' : ''}
+    <button class="btn primary mt12" data-act="healthCreate">${ic('heart', 18)}${doc ? 'Создать новую ссылку' : 'Подключить «Здоровье»'}</button>`;
+  return `<section class="card fade">
+      <div class="card-h"><div><h3>${ic('heart', 18)}Шаги из «Здоровья» автоматически</h3><small class="muted">${ios ? 'iPhone, через приложение «Команды»' : 'для iPhone (на Android — вставка вручную ниже)'}</small></div></div>
+      ${body}
+    </section>`;
+}
+ACT.healthCreate = async () => {
+  if (!(Store.backend === 'supa' && Supa.user)) { toast('Сначала войдите в аккаунт', 'warn'); return; }
+  if (D['health-token'] && !(await confirmDlg('Создать новую ссылку? Старая перестанет работать — её нужно будет заменить в команде «Шаги FORMA».', 'Создать', false))) return;
+  try {
+    const raw = new Uint8Array(24); crypto.getRandomValues(raw);
+    const tok = btoa(String.fromCharCode(...raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tok));
+    const hash = [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+    D['health-token'] = { kind: 'health-token', hash, created: Date.now() }; persist('health-token'); Store.flushAll();
+    try { localStorage.setItem(LS + 'healthToken:' + Store.uid, tok); } catch (e) { /* без хранилища ссылка покажется только сейчас */ }
+    render(); toast('Ссылка готова — теперь настройте команду по инструкции');
+  } catch (e) { console.error(e); toast('Не удалось создать ссылку: ' + (e.message || e), 'err'); }
+};
+ACT.healthCopy = () => { const t = healthTokenLocal(); if (t) copyText(healthLink(t), 'Ссылка скопирована'); };
+
+/* ------------------------------------------------------------
    Страница «Шаги»
    ------------------------------------------------------------ */
 PAGES.steps = {
@@ -281,17 +334,11 @@ PAGES.steps = {
       <div class="list">${runs.map((r) => `<div class="li"><div class="grow"><b>${fmt(r.km, 2)} км · ${r.min} мин</b><small class="muted">${new Date(r.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · темп ${paceStr(r.min / Math.max(r.km, 0.01))} мин/км · ${fmt(r.steps)} шагов${r.gps ? ' · GPS' : ''}</small></div><button class="icon-btn" data-act="runDel" data-id="${r.id}" data-date="${date}" aria-label="Удалить">${ic('x', 16)}</button></div>`).join('')}</div>
     </section>` : ''}
 
+    ${healthSyncHTML(ios)}
     <section class="card fade">
-      <div class="card-h"><div><h3>${ic('heart', 18)}Шаги за весь день из «Здоровья»</h3><small class="muted">${ios ? 'iPhone считает шаги всегда, даже когда FORMA закрыта' : 'Google Fit, Samsung Health, часы'}</small></div></div>
-      ${ios ? `<ol class="steps-list">
-        <li>Откройте приложение «Команды» → «+» → «Добавить действие».</li>
-        <li>Найдите «Найти образцы здоровья»: тип — «Шаги», дата начала — «Сегодня».</li>
-        <li>Добавьте «Вычислить статистику» и выберите «Сумма».</li>
-        <li>Добавьте «Скопировать в буфер обмена».</li>
-        <li>Назовите команду «Шаги FORMA». Запускайте её (или через «Автоматизацию» каждый вечер) и нажимайте здесь «Вставить шаги».</li>
-      </ol>` : '<p class="muted">Скопируйте число шагов из приложения шагов и нажмите «Вставить шаги» — FORMA прочитает его из буфера обмена.</p>'}
-      <div class="row gap8 mt12 wrap"><button class="btn primary" data-act="stepsPaste">${ic('copy', 18)}Вставить шаги</button></div>
-      <p class="muted sm mt8">Для Safari можно вместо буфера открыть ссылку <span class="mono">${esc(location.origin)}/#steps?n=ЧИСЛО</span> — шаги запишутся сами. <button class="link" data-act="stepsLinkCopy" style="background:none;border:0;padding:0;cursor:pointer">Скопировать</button></p>
+      <div class="card-h"><div><h3>${ic('copy', 18)}Вставить шаги вручную</h3><small class="muted">${ios ? 'если автосинхронизация не настроена' : 'Google Fit, Samsung Health, часы'}</small></div></div>
+      <p class="muted">Скопируйте число шагов из приложения шагов и нажмите «Вставить шаги» — FORMA прочитает его из буфера обмена.</p>
+      <div class="row gap8 mt12 wrap"><button class="btn" data-act="stepsPaste">${ic('copy', 18)}Вставить шаги</button></div>
     </section>`;
   },
   mount() {
