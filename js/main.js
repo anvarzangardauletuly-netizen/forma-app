@@ -88,7 +88,7 @@ const Reminders = {
     MEALS.forEach((m) => { const time = S.rem.meals[m.id]; if (time && time === hm && !(getDay(t).meals[m.id] || []).length) this.fire(`${m.name}: не забудьте записать, что съели`, t + m.id + hm); });
     if (+S.rem.water > 0 && hm >= S.rem.from && hm < S.rem.to) {
       const [fh, fm] = S.rem.from.split(':').map(Number); const mins = now.getHours() * 60 + now.getMinutes() - (fh * 60 + fm);
-      if (mins > 0 && mins % +S.rem.water === 0 && getDay(t).water < targets().water) this.fire(`Время выпить воды — сегодня ${fmt(getDay(t).water)} из ${fmt(targets().water)} мл`, t + 'w' + hm);
+      if (mins > 0 && mins % +S.rem.water === 0 && dayWater(getDay(t)) < targets().water) this.fire(`Время выпить воды — сегодня ${fmt(dayWater(getDay(t)))} из ${fmt(targets().water)} мл`, t + 'w' + hm);
     }
   },
 };

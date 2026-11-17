@@ -383,7 +383,7 @@ function periodRange() {
 function periodStats(from, to) {
   const days = rangeDays(from, to); const logged = days.filter((d) => D.days[d] && dayHasFood(D.days[d]));
   const sum = logged.reduce((a, d) => addN(a, dayTotals(D.days[d])), zeroN()); const avg = zeroN(); if (logged.length) NK.forEach((k) => { avg[k] = sum[k] / logged.length; });
-  const water = days.reduce((s, d) => s + (D.days[d] ? D.days[d].water || 0 : 0), 0) / days.length;
+  const water = days.reduce((s, d) => s + dayWater(D.days[d]), 0) / days.length;
   const wos = Object.values(D.workouts).filter((w) => w.date >= from && w.date <= to);
   const ws = D.weights.entries.filter((e) => e.date >= from && e.date <= to).sort((a, b) => (a.date < b.date ? -1 : 1));
   const T = targets(); const inRange = logged.filter((d) => { const k = dayTotals(D.days[d]).kcal; return k >= T.kcal * 0.9 && k <= T.kcal * 1.1; }).length;
@@ -430,7 +430,7 @@ PAGES.stats = {
     </div>
     <section class="card"><div class="card-h"><h3>${ic('book', 18)}История питания</h3><span class="muted sm">нажмите на день, чтобы открыть дневник</span></div>
       ${S.logged.length ? `<div class="tscroll"><table class="ntable hist"><tr><th>Дата</th><th>Ккал</th><th>Б</th><th>Ж</th><th>У</th><th>Клетч.</th><th>Вода</th></tr>
-      ${[...S.logged].reverse().map((d) => { const t = dayTotals(D.days[d]); return `<tr data-act="openDiary" data-d="${d}"><td>${fmtDate(d)}</td><td class="${t.kcal > T.kcal * 1.1 ? 'over-t' : ''}">${fmt(t.kcal)}</td><td>${fmt(t.p)}</td><td>${fmt(t.f)}</td><td>${fmt(t.c)}</td><td>${fmt(t.fib)}</td><td>${fmt(D.days[d].water)}</td></tr>`; }).join('')}</table></div>`
+      ${[...S.logged].reverse().map((d) => { const t = dayTotals(D.days[d]); return `<tr data-act="openDiary" data-d="${d}"><td>${fmtDate(d)}</td><td class="${t.kcal > T.kcal * 1.1 ? 'over-t' : ''}">${fmt(t.kcal)}</td><td>${fmt(t.p)}</td><td>${fmt(t.f)}</td><td>${fmt(t.c)}</td><td>${fmt(t.fib)}</td><td>${fmt(dayWater(D.days[d]))}</td></tr>`; }).join('')}</table></div>`
         : '<p class="muted">В выбранном периоде нет записей.</p>'}</section>`;
   },
   mount() {
@@ -454,7 +454,7 @@ ACT.exportCSV = () => {
   const [from, to] = periodRange(); const rows = [['Дата', 'Ккал', 'Белки', 'Жиры', 'Углеводы', 'Клетчатка', 'Сахара', 'Соль', 'Вода мл', 'Шаги', 'Вес кг', 'Тренировок']];
   const wmap = Object.fromEntries(D.weights.entries.map((e) => [e.date, e.kg]));
   rangeDays(from, to).forEach((d) => { const day = D.days[d]; const t = day ? dayTotals(day) : zeroN();
-    rows.push([d, r0(t.kcal), r1(t.p), r1(t.f), r1(t.c), r1(t.fib), r1(t.sug), r1(t.salt), day ? day.water : 0, day && day.steps != null ? day.steps : '', wmap[d] ?? '', workoutsOn(d).length]); });
+    rows.push([d, r0(t.kcal), r1(t.p), r1(t.f), r1(t.c), r1(t.fib), r1(t.sug), r1(t.salt), dayWater(day), day && day.steps != null ? day.steps : '', wmap[d] ?? '', workoutsOn(d).length]); });
   saveFile(`forma-${from}_${to}.csv`, '﻿' + rows.map((r) => r.join(';')).join('\n'), 'text/csv');
 };
 ACT.exportJSON = () => saveFile(`forma-backup-${todayISO()}.json`, JSON.stringify({ app: 'FORMA', version: 1, exported: new Date().toISOString(), docs: docsFromState() }, null, 1), 'application/json');

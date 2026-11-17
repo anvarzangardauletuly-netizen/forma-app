@@ -339,6 +339,13 @@ function oilN(oil) { return oil && oil.g > 0 && OILS[oil.t] ? scaleN(OILS[oil.t]
 function itemN(it) { return addN(scaleN(it.per, it.g), oilN(it.oil)); }
 function mealTotals(day, meal) { return (day.meals[meal] || []).reduce((acc, it) => addN(acc, itemN(it)), zeroN()); }
 function dayTotals(day) { const t = zeroN(); MEALS.forEach((m) => addN(t, mealTotals(day, m.id))); return t; }
+/* Вода за день = кнопки «+250 мл» + записанная в дневник вода (Вода питьевая, минеральная…) */
+const isWaterItem = (it) => !!it && (it.per && (it.per.kcal || 0) <= 5) && /(^|[\s«(])(вода|воды)([\s,.»)]|$)|минеральн|bonaqua|borjomi|боржоми|^asu\b/i.test(it.name || '');
+function dayWater(day) {
+  if (!day) return 0; let w = day.water || 0;
+  MEALS.forEach((m) => (day.meals && day.meals[m.id] || []).forEach((it) => { if (isWaterItem(it)) w += +it.g || 0; }));
+  return w;
+}
 function dayHasFood(day) { return MEALS.some((m) => (day.meals[m.id] || []).length); }
 
 function curWeight() {

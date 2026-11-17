@@ -40,7 +40,7 @@ const Discipline = {
     const [lo, hi] = this.corridor(goal);
     const ratio = budget > 0 ? t.kcal / budget : 0;
     const dist = t.kcal <= 0 ? 1 : ratio < lo ? lo - ratio : ratio > hi ? ratio - hi : 0;
-    const steps = day.steps || 0; const pRatio = T.p ? t.p / T.p : 0; const wRatio = T.water ? (day.water || 0) / T.water : 0;
+    const steps = day.steps || 0; const pRatio = T.p ? t.p / T.p : 0; const wRatio = T.water ? dayWater(day) / T.water : 0;
     const parts = {
       log: meals >= 2 ? 1 : meals === 1 ? 0.4 : 0,
       kcal: t.kcal <= 0 ? 0 : clamp(1 - dist / 0.15, 0, 1),
@@ -51,7 +51,7 @@ const Discipline = {
     const W = { log: 20, kcal: 30, protein: 20, steps: 20, water: 10 };
     const score = Math.round(Object.keys(W).reduce((s, k) => s + W[k] * parts[k], 0));
     const closed = raw && raw.closed;
-    return { date, score, parts, meals, kcal: t.kcal, budget, ratio, lo, hi, p: t.p, steps, water: day.water || 0, T, closed, empty: !raw || (meals === 0 && !raw.steps),
+    return { date, score, parts, meals, kcal: t.kcal, budget, ratio, lo, hi, p: t.p, steps, water: dayWater(day), T, closed, empty: !raw || (meals === 0 && !raw.steps),
       ok: closed !== 'failed' && score >= DISC_PASS };
   },
 

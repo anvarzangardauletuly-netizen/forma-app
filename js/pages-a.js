@@ -63,9 +63,9 @@ PAGES.dashboard = {
       </section>
 
       <section class="card fade">
-        <div class="card-h"><h3>${ic('drop', 18)}Вода</h3><span class="muted">${fmt(day.water)} / ${fmt(T.water)} мл</span></div>
-        <div class="glasses">${Array.from({ length: Math.min(glasses, 12) }, (_, i) => `<span class="glass ${day.water >= (i + 1) * 250 ? 'on' : ''}"></span>`).join('')}</div>
-        ${Charts.bar(day.water, T.water, 'var(--cw)', true)}
+        <div class="card-h"><h3>${ic('drop', 18)}Вода</h3><span class="muted">${fmt(dayWater(day))} / ${fmt(T.water)} мл</span></div>
+        <div class="glasses">${Array.from({ length: Math.min(glasses, 12) }, (_, i) => `<span class="glass ${dayWater(day) >= (i + 1) * 250 ? 'on' : ''}"></span>`).join('')}</div>
+        ${Charts.bar(dayWater(day), T.water, 'var(--cw)', true)}
         <div class="row gap8 mt12"><button class="btn sm" data-act="water" data-v="250">+250 мл</button><button class="btn sm" data-act="water" data-v="500">+500</button><button class="btn sm ghost" data-act="water" data-v="-250">−250</button><button class="btn sm ghost" data-act="waterCustom">Своё</button></div>
       </section>
 
@@ -133,7 +133,7 @@ function weekSummaryHTML() {
   if (!logged.length) return '';
   const avg = logged.reduce((a, d) => addN(a, dayTotals(D.days[d])), zeroN()); NK.forEach((k) => { avg[k] /= logged.length; });
   const wo = Object.values(D.workouts).filter((w) => w.date >= days[0]).length;
-  const water = days.reduce((s, d) => s + (D.days[d] ? D.days[d].water : 0), 0) / 7;
+  const water = days.reduce((s, d) => s + dayWater(D.days[d]), 0) / 7;
   return `<div class="kpis">
     <div><span class="muted">Ср. ккал</span><b>${fmt(avg.kcal)}</b></div><div><span class="muted">Ср. белок</span><b>${fmt(avg.p)} г</b></div>
     <div><span class="muted">Тренировок</span><b>${wo}</b></div><div><span class="muted">Ср. вода</span><b>${fmt(water / 1000, 1)} л</b></div></div>`;
@@ -152,7 +152,7 @@ function recommendations() {
     if (avg.salt > 6) out.push({ icon: 'info', text: `Соли ≈${fmt(avg.salt, 1)} г в день (по записанным продуктам) — ВОЗ советует до 5 г.` });
   } else out.push({ icon: 'book', text: 'Заполните дневник хотя бы 3 дня — рекомендации станут точнее.' });
   const day = getDay(t0); const h = new Date().getHours();
-  if (h >= 14 && day.water < T.water * 0.4) out.push({ icon: 'drop', text: `Сегодня выпито ${fmt(day.water)} мл из ${fmt(T.water)}. Самое время для стакана воды.` });
+  if (h >= 14 && dayWater(day) < T.water * 0.4) out.push({ icon: 'drop', text: `Сегодня выпито ${fmt(dayWater(day))} мл из ${fmt(T.water)}. Самое время для стакана воды.` });
   const lastWo = Object.values(D.workouts).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   if (lastWo && diffDays(lastWo.date, t0) >= 4) out.push({ icon: 'dumbbell', text: `Последняя тренировка была ${diffDays(lastWo.date, t0)} дн. назад.` });
   if (!D.weights.entries.some((e) => e.date >= addDays(t0, -7))) out.push({ icon: 'scale', text: 'Взвешивайтесь 1–2 раза в неделю утром, в одинаковых условиях — так динамика будет честнее.' });
@@ -243,7 +243,7 @@ PAGES.diary = {
       <div class="mgrid mt12">
         ${[['p', 'Белки', 'var(--cp)'], ['f', 'Жиры', 'var(--cf)'], ['c', 'Углеводы', 'var(--cc)'], ['fib', 'Клетчатка', 'var(--muted)']].map(([k, n, col]) => `<div><div class="row between"><small>${n}</small><small class="muted">${fmt(t[k])}/${fmt(T[k])} г</small></div>${Charts.bar(t[k], T[k], col, k === 'fib')}</div>`).join('')}
       </div>
-      <p class="muted sm mt8">Сахара ${fmt(t.sug, 1)} г · Соль ${fmt(t.salt, 1)} г · Вода ${fmt(day.water)} мл</p>
+      <p class="muted sm mt8">Сахара ${fmt(t.sug, 1)} г · Соль ${fmt(t.salt, 1)} г · Вода ${fmt(dayWater(day))} мл</p>
       <div class="row between mt8 day-steps"><span>${ic('steps', 16)} Шаги: <b>${day.steps != null ? fmt(day.steps) : '—'}</b> <span class="muted">из ${fmt(T.steps)}</span></span><button class="link-btn" data-act="stepsEdit" data-date="${date}">${day.steps != null ? 'Изменить' : 'Ввести'}</button></div>
     </section>
 
@@ -269,7 +269,7 @@ function mealCardHTML(day, m, date) {
       <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
     ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
       <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
-        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} г${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} ${isWaterItem(it) || /напит|сок|чай|кофе|компот|кефир|молоко|айран|кола|лимонад|вода/i.test(it.name) ? 'мл' : 'г'}${isWaterItem(it) ? ' · в воду' : ''}${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
         <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
   </section>`;
 }
