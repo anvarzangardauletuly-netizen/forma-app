@@ -197,7 +197,7 @@ ACT.oauth = async (el) => {
   if (!prov[el.dataset.p]) { toast(`Вход через ${name} пока не подключён. Войдите по e-mail.`, 'warn', 5000); el.hidden = true; return; }
   try {
     const c = await Supa.lib();
-    const { error } = await c.auth.signInWithOAuth({ provider: el.dataset.p, options: { redirectTo: location.origin + location.pathname } });
+    const { error } = await c.auth.signInWithOAuth({ provider: el.dataset.p, options: { redirectTo: location.origin + location.pathname, queryParams: el.dataset.p === 'google' ? { prompt: 'select_account' } : undefined } });
     if (error) throw error;
   } catch (e) {
     const off = /not enabled|unsupported provider/i.test((e && e.message) || '');
