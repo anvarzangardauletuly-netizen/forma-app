@@ -8,7 +8,10 @@
    ============================================================ */
 const AI = {
   ok: false, imgs: false, sample: null,
-  get photo() { return this.ok && this.imgs; },
+  /* На своём сайте (Vercel) AI работает через серверную функцию Supabase «food-ai» — нужен вход в аккаунт */
+  get server() { return Store.backend === 'supa' && !!Supa.client && !!Supa.user; },
+  get photo() { return (this.ok && this.imgs) || this.server; },
+  get food() { return this.ok || this.server; },
   async init() {
     if (!(window.claude && window.claude.use)) return;
     try {
@@ -24,14 +27,56 @@ const AI = {
     }
     const r = await this.sample(prompt, opts); return parseJSONLoose(r.text);
   },
+  /* Задачи по еде: photo (фото тарелки), label (фото этикетки), text (описание словами).
+     Внутри claude.ai — через sample, на сайте — через серверную функцию. */
+  async task(task, { blob = null, grams = null, hint = '', text = '' } = {}) {
+    if (this.server) {
+      if (navigator.onLine === false) throw { code: 'offline' };
+      const body = { task, grams, hint, text };
+      if (blob) body.image = await blobToB64(blob);
+      const { data, error } = await withTimeout(Supa.client.functions.invoke('food-ai', { body }), 90000, 'AI не ответил вовремя');
+      if (error) {
+        let info = null; try { info = error.context && typeof error.context.json === 'function' ? await error.context.json() : null; } catch (e) { /* без тела */ }
+        throw { code: (info && info.error) || error.code || 'ai_failed', message: error.message, limit: info && info.limit };
+      }
+      if (!data || !data.ok) throw { code: (data && data.error) || 'ai_failed' };
+      return data.data;
+    }
+    const gramsLine = grams ? `\nПользователь взвесил: вся еда весит ${grams} г — распредели эту массу между позициями.` : '';
+    const hintLine = hint ? `\nПодсказка пользователя: «${hint}».` : '';
+    const ITEMS = `Верни ТОЛЬКО JSON: {"items":[{"name":"название на русском","grams":число,"kcal":ккал на 100г,"p":белки на 100г,"f":жиры на 100г,"c":углеводы на 100г,"fib":клетчатка на 100г}],"comment":"короткое пояснение на русском, что могло быть оценено неточно"}`;
+    if (task === 'photo') return this.json(`Ты — нутрициолог. Определи продукты и блюда на фото, оцени массу каждого в граммах и пищевую ценность НА 100 г по типичным табличным данным.${gramsLine}${hintLine}
+${ITEMS}
+Если еды на фото нет — {"items":[],"comment":"на фото нет еды"}.`, [blob]);
+    if (task === 'text') return this.json(`Ты — нутрициолог. Пользователь описал, что съел: «${text}».${grams ? ` Общая масса: ${grams} г.` : ''} Разбери на продукты/блюда (1–4 позиции), оцени массу каждого (если не указана — типичная порция) и пищевую ценность на 100 г. Это может быть блюдо любой кухни мира или товар из магазина.
+${ITEMS}`);
+    const d = await this.json(`Это фото упаковки продукта. Найди таблицу пищевой ценности и верни ТОЛЬКО JSON без пояснений:
+{"found": true, "name": "название продукта на русском", "brand": "производитель или пустая строка", "kcal": число ккал на 100 г, "p": белки г на 100 г, "f": жиры г на 100 г, "c": углеводы г на 100 г, "fib": клетчатка или 0, "sug": сахара или 0, "salt": соль г или 0, "portion_g": масса упаковки или порции в граммах или 100, "confidence": "high"|"low"}
+Если значения указаны на порцию — пересчитай на 100 г. Если на фото нет таблицы, верни {"found": false}.`, [blob]);
+    return d;
+  },
+  /* Почему фото/AI недоступно — понятным языком */
+  whyOff() {
+    if (Store.backend === 'supa' && !Supa.user) return 'Распознавание работает после входа в аккаунт. Войдите в «Профиле» — это бесплатно.';
+    if (!IN_FRAME && Store.backend !== 'supa') return 'Распознавание работает после входа в аккаунт FORMA (Профиль → «Войти»).';
+    return 'Распознавание фото недоступно в этом окне — нет доступа к AI.';
+  },
   errText(e) {
     const c = e && e.code;
     if (c === 'not_granted') return 'Доступ к AI не разрешён для этой страницы.';
-    if (c === 'rate_limited') return 'Слишком много запросов к AI — подождите минуту.';
+    if (c === 'rate_limited' || c === 'busy') return 'AI сейчас занят — попробуйте через минуту.';
+    if (c === 'limit') return `На сегодня лимит распознаваний исчерпан (${(e && e.limit) || 40} в день). Завтра снова можно — а пока добавьте еду через поиск.`;
+    if (c === 'not_configured') return 'Распознавание по фото ещё не включено на сервере (не задан ключ AI). Добавьте еду через поиск или штрихкод.';
+    if (c === 'auth') return 'Войдите в аккаунт заново, чтобы пользоваться распознаванием.';
+    if (c === 'offline') return 'Нет интернета — распознавание недоступно. Добавьте еду через поиск: база работает без сети.';
+    if (c === 'refused') return 'AI не смог обработать это фото. Попробуйте другой снимок.';
     if (c === 'no_images') return 'Распознавание фото здесь недоступно.';
     return 'AI не ответил: ' + ((e && e.message) || 'попробуйте ещё раз');
   },
 };
+function blobToB64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(new Error('Не удалось прочитать фото')); r.readAsDataURL(blob); });
+}
 function parseJSONLoose(t) { const m = String(t || '').match(/[\[{][\s\S]*[\]}]/); if (!m) throw new Error('AI вернул не JSON'); return JSON.parse(m[0]); }
 async function shrinkImage(file, max = 1280) {
   const bmp = await createImageBitmap(file); const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
@@ -43,45 +88,96 @@ async function shrinkImage(file, max = 1280) {
 /* Распознавание еды по фото с проверкой и правкой результата */
 ACT.aiPhoto = (el) => {
   const date = el.dataset.date || App.diaryDate; const meal = el.dataset.meal || autoMeal();
-  if (!AI.photo) { Sheet.open({ title: 'Еда по фото', body: `<p class="lead">Распознавание фото недоступно в этом окне${AI.ok ? '' : ' — нет доступа к AI'}.</p><p class="muted">Добавьте продукты через поиск или штрихкод.</p>` }); return; }
-  const s = Sheet.open({ title: 'Еда по фото', wide: true, body: `<p class="muted">Сфотографируйте тарелку сверху при хорошем свете. AI оценит продукты и граммовку — вы проверите и исправите всё перед добавлением.</p>
+  if (!AI.photo) { aiOffSheet('Еда по фото'); return; }
+  const s = Sheet.open({ title: 'Еда по фото', wide: true, body: `<p class="muted">Сфотографируйте тарелку сверху при хорошем свете. AI определит блюда и примерное КБЖУ — вы проверите и поправите всё перед добавлением.</p>
+    <div class="f2 mt12"><label>Вес порции, г<input class="input" data-k="grams" inputmode="decimal" placeholder="если знаете" maxlength="5"></label>
+      <label>Что на тарелке<input class="input" data-k="hint" placeholder="напр.: плов" maxlength="120"></label></div>
+    <p class="muted sm">Оба поля необязательные: с ними оценка точнее.</p>
     <div class="row gap8 wrap mt12"><label class="btn primary">${ic('camera', 18)}Сделать фото<input type="file" accept="image/*" capture="environment" hidden data-k="f"></label>
     <label class="btn">${ic('image', 18)}Из галереи<input type="file" accept="image/*" hidden data-k="f"></label></div><div data-k="out" class="mt16"></div>` });
   s.querySelectorAll('[data-k=f]').forEach((inp) => { inp.onchange = async () => {
     const file = inp.files[0]; inp.value = ''; if (!file) return; const out = s.querySelector('[data-k=out]');
+    const gIn = s.querySelector('[data-k=grams]'); const grams = num(gIn.value);
+    if (gIn.value.trim() && !(grams > 0 && grams <= 5000)) { markInvalid(gIn, 'Вес порции — от 1 до 5000 г (или оставьте пустым)'); return; }
     const url = URL.createObjectURL(file);
-    out.innerHTML = `<img src="${url}" class="photo-prev" alt="Фото еды"><div class="loading mt12">${ic('spark', 20)}Анализирую фото…</div>`;
+    out.innerHTML = `<img src="${url}" class="photo-prev" alt="Фото еды"><div class="loading mt12">${ic('spark', 20)}Анализирую фото… обычно 5–15 секунд</div>`;
     try {
       const blob = await shrinkImage(file, 1280);
-      const data = await AI.json(`Ты — нутрициолог. Определи продукты и блюда на фото, оцени массу каждого в граммах и пищевую ценность НА 100 г по типичным табличным данным.
-Верни ТОЛЬКО JSON: {"items":[{"name":"название на русском","grams":число,"kcal":ккал на 100г,"p":белки на 100г,"f":жиры на 100г,"c":углеводы на 100г}],"comment":"короткое пояснение на русском, что могло быть оценено неточно"}
-Если еды на фото нет — {"items":[],"comment":"на фото нет еды"}.`, [blob]);
-      const items = (data.items || []).filter((x) => x && x.name).slice(0, 12);
-      if (!items.length) { out.innerHTML = `<img src="${url}" class="photo-prev" alt=""><div class="banner warn mt12">${esc(data.comment || 'Не удалось распознать еду на фото.')}</div>`; return; }
-      out.innerHTML = `<img src="${url}" class="photo-prev" alt="">
-        <div class="banner info mt12">${ic('info', 18)}<div>Это оценка AI${data.comment ? ': ' + esc(data.comment) : ''}. Проверьте названия, граммы и значения на 100 г.</div></div>
-        <div class="ai-items">${items.map((x, i) => `<div class="ai-it" data-i="${i}"><label class="chk-l"><input type="checkbox" checked data-f="on"><input class="input" data-f="name" value="${esc(x.name)}" maxlength="80"></label>
-          <div class="f5 tight"><label>г<input class="input" data-f="grams" inputmode="decimal" value="${r0(x.grams)}"></label><label>ккал/100<input class="input" data-f="kcal" inputmode="decimal" value="${r0(x.kcal)}"></label>
-          <label>Б<input class="input" data-f="p" inputmode="decimal" value="${r1(x.p)}"></label><label>Ж<input class="input" data-f="f" inputmode="decimal" value="${r1(x.f)}"></label><label>У<input class="input" data-f="c" inputmode="decimal" value="${r1(x.c)}"></label></div></div>`).join('')}</div>
-        <p class="muted sm" data-k="sum"></p>
-        <label class="form">Приём пищи<select class="input" data-k="meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
-        <button class="btn primary block mt12" data-k="add">Добавить выбранное в дневник</button>`;
-      const read = () => [...out.querySelectorAll('.ai-it')].map((row) => { const g = (f) => row.querySelector(`[data-f=${f}]`); return { on: g('on').checked, name: g('name').value.trim(), grams: num(g('grams').value), per: { kcal: num(g('kcal').value), p: num(g('p').value), f: num(g('f').value), c: num(g('c').value), fib: 0, sug: 0, salt: 0 }, row }; });
-      const sum = () => { const t = read().filter((x) => x.on).reduce((a, x) => addN(a, scaleN(x.per, x.grams || 0)), zeroN()); out.querySelector('[data-k=sum]').textContent = `Итого: ${fmt(t.kcal)} ккал · Б ${fmt(t.p)} · Ж ${fmt(t.f)} · У ${fmt(t.c)}`; };
-      out.addEventListener('input', sum); sum();
-      out.querySelector('[data-k=add]').onclick = () => {
-        const list = read().filter((x) => x.on); if (!list.length) { toast('Ничего не выбрано', 'warn'); return; }
-        for (const x of list) {
-          const bad = !x.name || !(x.grams > 0 && x.grams <= 3000) || ['kcal', 'p', 'f', 'c'].some((k) => !(x.per[k] >= 0 && x.per[k] <= (k === 'kcal' ? 950 : 100)));
-          if (bad) { x.row.classList.add('invalid'); toast('Проверьте выделенную строку: граммы 1–3000, ккал 0–950, БЖУ 0–100', 'err'); return; }
-        }
-        const m = out.querySelector('[data-k=meal]').value;
-        list.forEach((x) => addToDiary(date, m, { id: 'ai_' + uid(), name: x.name, brand: 'Оценка по фото', per: x.per }, r1(x.grams)));
-        Sheet.closeAll(); render(); toast(`Добавлено: ${list.length} шт.`);
-      };
+      const data = await AI.task('photo', { blob, grams: grams > 0 ? grams : null, hint: s.querySelector('[data-k=hint]').value.trim() });
+      aiItemsEditor(out, data, { date, meal, img: url, brand: 'Оценка по фото', totalGrams: grams > 0 ? grams : null });
     } catch (e) { console.warn(e); out.innerHTML = `<img src="${url}" class="photo-prev" alt=""><div class="banner warn mt12">${esc(AI.errText(e))}</div>`; }
   }; });
 };
+function aiOffSheet(title) {
+  const login = Store.backend !== 'supa' && !IN_FRAME;
+  Sheet.open({ title, body: `<p class="lead">${esc(AI.whyOff())}</p><p class="muted">А пока добавьте еду через поиск по базе или по штрихкоду.</p>${login ? '<button class="btn primary block mt12" data-act="signIn">Войти в аккаунт</button>' : ''}` });
+}
+/* Описание словами: «плов 300 г и чай с сахаром» → КБЖУ (любая кухня мира) */
+ACT.aiText = (el) => {
+  const date = el.dataset.date || App.diaryDate; const meal = el.dataset.meal || autoMeal();
+  if (!AI.food) { aiOffSheet('Описать словами'); return; }
+  const s = Sheet.open({ title: 'Описать словами', wide: true, body: `<p class="muted">Напишите, что съели — любое блюдо любой кухни или товар из магазина. AI оценит КБЖУ, вы проверите.</p>
+    <form class="form mt12" data-k="f"><label>Что съели<input class="input" name="t" value="${esc(el.dataset.q || '')}" maxlength="200" placeholder="напр.: бешбармак 350 г и чай с сахаром"></label>
+    <label>Общий вес, г<input class="input" name="g" inputmode="decimal" placeholder="необязательно"></label>
+    <button class="btn primary block">${ic('spark', 18)}Оценить</button></form><div data-k="out" class="mt16"></div>` });
+  const f = s.querySelector('[data-k=f]');
+  f.onsubmit = async (e) => {
+    e.preventDefault(); const text = f.t.value.trim(); const g = num(f.g.value);
+    if (text.length < 2) { markInvalid(f.t, 'Напишите, что вы съели'); return; }
+    if (f.g.value.trim() && !(g > 0 && g <= 5000)) { markInvalid(f.g, 'Вес — от 1 до 5000 г'); return; }
+    const out = s.querySelector('[data-k=out]'); const btn = f.querySelector('button'); btn.disabled = true;
+    out.innerHTML = `<div class="loading">${ic('spark', 20)}Считаю…</div>`;
+    try { const data = await AI.task('text', { text, grams: g > 0 ? g : null }); aiItemsEditor(out, data, { date, meal, brand: 'Оценка AI', totalGrams: g > 0 ? g : null }); }
+    catch (err) { out.innerHTML = `<div class="banner warn">${esc(AI.errText(err))}</div>`; }
+    btn.disabled = false;
+  };
+  setTimeout(() => f.t.focus(), 150);
+};
+/* Проверка и правка результата AI перед добавлением в дневник */
+function aiItemsEditor(out, data, { date, meal, img = '', brand, totalGrams = null }) {
+  const pic = img ? `<img src="${img}" class="photo-prev" alt="">` : '';
+  const items = ((data && data.items) || []).filter((x) => x && x.name).slice(0, 12);
+  if (!items.length) { out.innerHTML = `${pic}<div class="banner warn mt12">${esc((data && data.comment) || 'Не удалось распознать еду.')}</div>`; return; }
+  const v = (x, d) => (Number.isFinite(+x) ? (d ? r1(x) : r0(x)) : '');
+  out.innerHTML = `${pic}
+    <div class="banner info mt12">${ic('info', 18)}<div>Это примерная оценка AI${data.comment ? ': ' + esc(data.comment) : ''}. Проверьте названия и граммы — значения ккал и БЖУ указаны на 100 г.</div></div>
+    <div class="ai-items">${items.map((x, i) => `<div class="ai-it" data-i="${i}"><label class="chk-l"><input type="checkbox" checked data-f="on" aria-label="Добавить"><input class="input" data-f="name" value="${esc(x.name)}" maxlength="80"></label>
+      <div class="f5 tight"><label>Граммы<input class="input" data-f="grams" inputmode="decimal" value="${v(x.grams)}"></label><label>ккал/100 г<input class="input" data-f="kcal" inputmode="decimal" value="${v(x.kcal)}"></label>
+      <label>Б<input class="input" data-f="p" inputmode="decimal" value="${v(x.p, 1)}"></label><label>Ж<input class="input" data-f="f" inputmode="decimal" value="${v(x.f, 1)}"></label><label>У<input class="input" data-f="c" inputmode="decimal" value="${v(x.c, 1)}"></label></div>
+      <input type="hidden" data-f="fib" value="${v(x.fib, 1) || 0}"></div>`).join('')}</div>
+    <div class="ai-total"><label>Общий вес, г<input class="input" data-k="total" inputmode="decimal" placeholder="—"></label><small class="muted">Взвесили еду? Впишите общий вес — граммы пересчитаются пропорционально.</small></div>
+    <div class="preview" data-k="sum"></div>
+    <label class="form">Приём пищи<select class="input" data-k="meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
+    <button class="btn primary block mt12" data-k="add">${ic('plus', 18)}Добавить выбранное в дневник</button>`;
+  const read = () => [...out.querySelectorAll('.ai-it')].map((row) => { const g = (f) => row.querySelector(`[data-f=${f}]`); return { on: g('on').checked, name: g('name').value.trim(), grams: num(g('grams').value), per: { kcal: num(g('kcal').value), p: num(g('p').value), f: num(g('f').value), c: num(g('c').value), fib: num(g('fib').value) || 0, sug: 0, salt: 0 }, row }; });
+  const totalIn = out.querySelector('[data-k=total]');
+  const sum = () => {
+    const sel = read().filter((x) => x.on); const t = sel.reduce((a, x) => addN(a, scaleN(x.per, x.grams || 0)), zeroN());
+    const g = sel.reduce((a, x) => a + (x.grams || 0), 0);
+    if (document.activeElement !== totalIn) totalIn.value = g ? r0(g) : '';
+    out.querySelector('[data-k=sum]').innerHTML = `<div class="pv-k"><b>${fmt(t.kcal)}</b><span>ккал</span></div><div><b>${fmt(t.p, 1)}</b><span>белки</span></div><div><b>${fmt(t.f, 1)}</b><span>жиры</span></div><div><b>${fmt(t.c, 1)}</b><span>углеводы</span></div>`;
+  };
+  totalIn.addEventListener('change', () => {
+    const want = num(totalIn.value); const sel = read().filter((x) => x.on); const have = sel.reduce((a, x) => a + (x.grams || 0), 0);
+    if (!(want > 0 && want <= 5000) || !have) { sum(); return; }
+    sel.forEach((x) => { x.row.querySelector('[data-f=grams]').value = r0(x.grams * want / have); }); sum();
+  });
+  out.addEventListener('input', (e) => { if (e.target !== totalIn) sum(); });
+  out.addEventListener('change', (e) => { if (e.target.dataset.f === 'on') sum(); });
+  if (totalGrams) { const have = items.reduce((a, x) => a + (+x.grams || 0), 0); if (have && Math.abs(have - totalGrams) > 2) { totalIn.value = totalGrams; totalIn.dispatchEvent(new Event('change')); } }
+  sum();
+  out.querySelector('[data-k=add]').onclick = () => {
+    const list = read().filter((x) => x.on); if (!list.length) { toast('Ничего не выбрано', 'warn'); return; }
+    out.querySelectorAll('.ai-it').forEach((r) => r.classList.remove('invalid'));
+    for (const x of list) {
+      const bad = !x.name || !(x.grams > 0 && x.grams <= 5000) || ['kcal', 'p', 'f', 'c'].some((k) => !(x.per[k] >= 0 && x.per[k] <= (k === 'kcal' ? 950 : 100)));
+      if (bad) { x.row.classList.add('invalid'); x.row.scrollIntoView({ block: 'center', behavior: 'smooth' }); toast('Проверьте выделенную строку: граммы 1–5000, ккал 0–950, БЖУ 0–100', 'err'); return; }
+    }
+    const m = out.querySelector('[data-k=meal]').value;
+    list.forEach((x) => addToDiary(date, m, { id: 'ai_' + uid(), name: x.name, brand, per: x.per }, r1(x.grams)));
+    Sheet.closeAll(); if (App.page === 'diary') App.diaryDate = date; render(); toast(`Добавлено в «${MEALS.find((mm) => mm.id === m).name}»: ${list.length} шт.`);
+  };
+}
 
 /* ---------- AI-помощник по питанию (чат) ---------- */
 App.chat = [];

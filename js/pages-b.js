@@ -205,11 +205,9 @@ ACT.labelPhoto = async (el) => {
   out.insertAdjacentHTML('beforeend', `<section class="card" id="lblLoad"><div class="loading">${ic('spark', 20)}Читаю этикетку…</div></section>`);
   try {
     const blob = await shrinkImage(file, 1400);
-    const data = await AI.json(`Это фото упаковки продукта. Найди таблицу пищевой ценности и верни ТОЛЬКО JSON без пояснений:
-{"name": "название продукта на русском", "brand": "производитель или пустая строка", "kcal": число ккал на 100 г, "p": белки г на 100 г, "f": жиры г на 100 г, "c": углеводы г на 100 г, "fib": клетчатка или 0, "sug": сахара или 0, "salt": соль г или 0, "portion_g": масса упаковки или порции в граммах или 100, "confidence": "high"|"low"}
-Если значения указаны на порцию — пересчитай на 100 г. Если на фото нет таблицы, верни {"error": "нет таблицы"}.`, [blob]);
+    const data = await AI.task('label', { blob });
     $('#lblLoad') && $('#lblLoad').remove();
-    if (!data || data.error) { toast('Не удалось найти таблицу КБЖУ на фото. Попробуйте снять ближе.', 'warn'); return; }
+    if (!data || data.error || data.found === false) { toast('Не удалось найти таблицу КБЖУ на фото. Попробуйте снять ближе.', 'warn'); return; }
     openFoodForm({ barcode: code, food: { name: data.name || '', brand: data.brand || '', cat: 'custom', per: { kcal: data.kcal, p: data.p, f: data.f, c: data.c, fib: data.fib, sug: data.sug, salt: data.salt }, portion: { g: data.portion_g || 100, label: 'упаковка' } }, isCopy: true,
       note: `Значения считаны AI с фото${data.confidence === 'low' ? ' (низкая уверенность)' : ''}. Сверьте их с упаковкой и исправьте при необходимости.`, afterSave: (f) => handleCode(f.barcode) });
   } catch (e) { $('#lblLoad') && $('#lblLoad').remove(); out.innerHTML = old; toast(AI.errText(e), 'err'); }
@@ -356,7 +354,8 @@ ACT.tgCheck = () => {
 ACT.targetsSave = validated((f) => {
   const t = { kcal: readNum(f, 'kcal', { min: 800, max: 6000, label: 'Калории' }), p: readNum(f, 'p', { min: 20, max: 400, label: 'Белки' }), f: readNum(f, 'f', { min: 15, max: 300, label: 'Жиры' }),
     c: readNum(f, 'c', { min: 0, max: 900, label: 'Углеводы' }), fib: readNum(f, 'fib', { min: 5, max: 80, label: 'Клетчатка' }), water: readNum(f, 'water', { min: 500, max: 6000, label: 'Вода' }) };
-  const steps = readNum(f, 'steps', { min: 0, max: 50000, label: 'Шаги', int: true });
+  f.steps.value = f.steps.value.replace(/[\s\u00a0]/g, '');
+  const steps = readNum(f, 'steps', { min: 500, max: 60000, label: 'Шаги', int: true });
   const gw = readNum(f, 'gw', { min: 25, max: 350, required: false, label: 'Желаемый вес' });
   const P = D.profile || {};
   if (P.age && P.age < 18 && t.kcal < calcTargets({ sex: P.sex || 'm', age: P.age, height: curHeight(), weight: curWeight(), activity: +P.activity || 1.375, goal: 'maintain' }).tdee * 0.85) {

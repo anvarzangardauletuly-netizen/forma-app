@@ -65,15 +65,15 @@ PAGES.dashboard = {
       <section class="card fade">
         <div class="card-h"><h3>${ic('drop', 18)}Вода</h3><span class="muted">${fmt(day.water)} / ${fmt(T.water)} мл</span></div>
         <div class="glasses">${Array.from({ length: Math.min(glasses, 12) }, (_, i) => `<span class="glass ${day.water >= (i + 1) * 250 ? 'on' : ''}"></span>`).join('')}</div>
-        ${Charts.bar(day.water, T.water, 'var(--cw)')}
+        ${Charts.bar(day.water, T.water, 'var(--cw)', true)}
         <div class="row gap8 mt12"><button class="btn sm" data-act="water" data-v="250">+250 мл</button><button class="btn sm" data-act="water" data-v="500">+500</button><button class="btn sm ghost" data-act="water" data-v="-250">−250</button><button class="btn sm ghost" data-act="waterCustom">Своё</button></div>
       </section>
 
       <section class="card fade">
         <div class="card-h"><h3>${ic('steps', 18)}Шаги</h3><a href="#steps" class="link">${Pedo.on ? '● идёт подсчёт' : 'Подробнее'}</a></div>
         ${stepsOn ? stepsSummaryHTML(day, T, burned)
-          : `<p class="muted">Сегодня шагов пока нет. Включите шагомер или перенесите шаги из приложения «Здоровье».</p>`}
-        <div class="row gap8 mt12 wrap"><button class="btn sm ${Pedo.on ? '' : 'primary'}" data-act="pedometer">${Pedo.on ? 'Остановить' : 'Шагомер'}</button><button class="btn sm" data-act="stepsEdit">${stepsOn ? 'Изменить' : 'Ввести'}</button></div>
+          : `<p class="muted">Сегодня шагов пока нет. Впишите их вручную, включите шагомер или перенесите из «Здоровья». Цель — ${fmt(T.steps)} в день.</p>`}
+        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${stepsOn ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="pedometer">${Pedo.on ? 'Остановить' : 'Шагомер'}</button><button class="btn sm ghost" data-act="stepsGoalEdit">Цель</button></div>
       </section>
 
       <section class="card fade">
@@ -165,13 +165,43 @@ ACT.waterCustom = () => {
   Sheet.open({ title: 'Добавить воду', body: `<form data-sub="waterCustomSave" class="form"><label>Объём, мл<input class="input" name="ml" inputmode="numeric" placeholder="например, 330" autofocus></label><button class="btn primary block">Добавить</button></form>` });
 };
 ACT.waterCustomSave = validated((f) => { const ml = readNum(f, 'ml', { min: -3000, max: 3000, label: 'Объём' }); const d = ensureDay(todayISO()); d.water = Math.max(0, d.water + ml); saveDay(todayISO()); Sheet.close(); render(); });
-ACT.stepsEdit = () => {
-  const d = getDay(todayISO());
-  Sheet.open({ title: 'Шаги за сегодня', body: `<form data-sub="stepsSave" class="form"><label>Количество шагов<input class="input" name="steps" inputmode="numeric" value="${d.steps ?? ''}" placeholder="например, 8500"></label><p class="muted sm">Перепишите значение из приложения телефона или часов. Пустое поле — «нет данных».</p><button class="btn primary block">Сохранить</button></form>` });
+/* Шаги вручную — за любой день (по умолчанию сегодня; в дневнике — открытый день) */
+ACT.stepsEdit = (el) => {
+  const date = (el && el.dataset && el.dataset.date) || (App.page === 'diary' ? App.diaryDate : todayISO());
+  const d = getDay(date); const T = targets();
+  const s = Sheet.open({ title: 'Сколько шагов вы прошли', body: `<form data-sub="stepsSave" class="form">
+    <label>День<input class="input" type="date" name="date" value="${date}" max="${todayISO()}"></label>
+    <label>Количество шагов<input class="input big" name="steps" inputmode="numeric" value="${d.steps ?? ''}" placeholder="например, 8500" autocomplete="off"></label>
+    <div class="chips" data-k="add">${[1000, 2000, 5000].map((n) => `<button type="button" class="chip" data-n="${n}">+${fmt(n)}</button>`).join('')}<button type="button" class="chip" data-n="goal">= цель (${fmt(T.steps)})</button></div>
+    <p class="muted sm">Перепишите число из приложения телефона или часов. Пустое поле — «нет данных за день».</p>
+    <button class="btn primary block">Сохранить</button></form>` });
+  const f = s.querySelector('form'); const inp = f.steps;
+  f.date.onchange = () => { const x = getDay(f.date.value || todayISO()).steps; inp.value = x ?? ''; };
+  s.querySelector('[data-k=add]').onclick = (e) => { const b = e.target.closest('[data-n]'); if (!b) return; inp.value = b.dataset.n === 'goal' ? T.steps : (parseInt(inp.value.replace(/\D/g, ''), 10) || 0) + +b.dataset.n; };
+  setTimeout(() => inp.focus(), 150);
 };
 ACT.stepsSave = validated((f) => {
-  const v = readNum(f, 'steps', { min: 0, max: 100000, required: false, label: 'Шаги', int: true });
-  const d = ensureDay(todayISO()); d.steps = v; d.stepsSrc = v == null ? null : 'manual'; saveDay(todayISO()); Sheet.close(); render();
+  f.steps.value = f.steps.value.replace(/[\s\u00a0]/g, '');
+  const v = readNum(f, 'steps', { min: 0, max: 150000, required: false, label: 'Шаги', int: true });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(f.date.value) && f.date.value <= todayISO() ? f.date.value : todayISO();
+  const d = ensureDay(date); d.steps = v; d.stepsSrc = v == null ? null : 'manual';
+  if (v == null || (d.stepsRun || 0) > v) { d.stepsRun = v == null ? 0 : Math.min(d.stepsRun || 0, v); d.kmRun = null; }
+  saveDay(date); Sheet.close(); render(); toast(v == null ? 'Шаги за день очищены' : `Шаги за ${fmtDate(date).toLowerCase()}: ${fmt(v)}`);
+});
+/* Своя цель по шагам */
+ACT.stepsGoalEdit = () => {
+  const T = targets();
+  const s = Sheet.open({ title: 'Цель: шагов в день', body: `<form data-sub="stepsGoalSave" class="form">
+    <label>Сколько шагов в день хотите проходить<input class="input big" name="goal" inputmode="numeric" value="${T.steps}" autocomplete="off"></label>
+    <div class="chips" data-k="pre">${[5000, 6000, 8000, 10000, 12000, 15000].map((n) => `<button type="button" class="chip ${n === T.steps ? 'on' : ''}" data-n="${n}">${fmt(n)}</button>`).join('')}</div>
+    <p class="muted sm">Ориентир ВОЗ для взрослых — 7–10 тысяч шагов в день. Начните с реальной цели и повышайте постепенно.</p>
+    <button class="btn primary block">Сохранить цель</button></form>` });
+  s.querySelector('[data-k=pre]').onclick = (e) => { const b = e.target.closest('[data-n]'); if (!b) return; s.querySelector('[name=goal]').value = b.dataset.n; s.querySelectorAll('[data-k=pre] .chip').forEach((c) => c.classList.toggle('on', c === b)); };
+};
+ACT.stepsGoalSave = validated((f) => {
+  f.goal.value = f.goal.value.replace(/[\s\u00a0]/g, '');
+  const v = readNum(f, 'goal', { min: 500, max: 60000, label: 'Цель шагов', int: true });
+  D.profile = Object.assign(D.profile || {}, { stepsGoal: v }); persist('profile'); Sheet.close(); render(); toast(`Цель: ${fmt(v)} шагов в день`);
 });
 ACT.activityAdd = (el) => {
   const date = el.dataset.date || todayISO();
@@ -211,9 +241,10 @@ PAGES.diary = {
         <div class="right"><span class="muted">${budget - t.kcal >= 0 ? 'Осталось' : 'Сверх нормы'}</span><div class="bignum ${budget - t.kcal < 0 ? 'over-t' : ''}">${fmt(Math.abs(budget - t.kcal))}</div></div></div>
       ${Charts.bar(t.kcal, budget)}
       <div class="mgrid mt12">
-        ${[['p', 'Белки', 'var(--cp)'], ['f', 'Жиры', 'var(--cf)'], ['c', 'Углеводы', 'var(--cc)'], ['fib', 'Клетчатка', 'var(--muted)']].map(([k, n, col]) => `<div><div class="row between"><small>${n}</small><small class="muted">${fmt(t[k])}/${fmt(T[k])} г</small></div>${Charts.bar(t[k], T[k], col)}</div>`).join('')}
+        ${[['p', 'Белки', 'var(--cp)'], ['f', 'Жиры', 'var(--cf)'], ['c', 'Углеводы', 'var(--cc)'], ['fib', 'Клетчатка', 'var(--muted)']].map(([k, n, col]) => `<div><div class="row between"><small>${n}</small><small class="muted">${fmt(t[k])}/${fmt(T[k])} г</small></div>${Charts.bar(t[k], T[k], col, k === 'fib')}</div>`).join('')}
       </div>
       <p class="muted sm mt8">Сахара ${fmt(t.sug, 1)} г · Соль ${fmt(t.salt, 1)} г · Вода ${fmt(day.water)} мл</p>
+      <div class="row between mt8 day-steps"><span>${ic('steps', 16)} Шаги: <b>${day.steps != null ? fmt(day.steps) : '—'}</b> <span class="muted">из ${fmt(T.steps)}</span></span><button class="link-btn" data-act="stepsEdit" data-date="${date}">${day.steps != null ? 'Изменить' : 'Ввести'}</button></div>
     </section>
 
     ${MEALS.map((m) => mealCardHTML(day, m, date)).join('')}
@@ -225,6 +256,7 @@ PAGES.diary = {
         <button class="btn sm" data-act="copyDay">${ic('copy', 16)}Копировать день</button>
         <button class="btn sm" data-act="quickAdd" data-date="${date}" data-meal="${autoMeal()}">${ic('flame', 16)}Быстрое добавление ккал</button>
         <button class="btn sm" data-act="aiPhoto" data-date="${date}" data-meal="${autoMeal()}">${ic('camera', 16)}Еда по фото</button>
+        <button class="btn sm" data-act="aiText" data-date="${date}" data-meal="${autoMeal()}">${ic('spark', 16)}Описать словами</button>
       </div>
     </section>`;
   },
@@ -284,6 +316,7 @@ function openFoodPicker(ctx) {
       ${ctx.mode === 'diary' ? `<div class="quick-row">
         <button class="qbtn" data-k="scan">${ic('scan', 20)}<span>Штрихкод</span></button>
         <button class="qbtn" data-k="photo">${ic('camera', 20)}<span>Фото еды</span></button>
+        <button class="qbtn" data-k="aitext">${ic('spark', 20)}<span>Описать словами</span></button>
         <button class="qbtn" data-k="quick">${ic('flame', 20)}<span>Быстро ккал</span></button>
         <button class="qbtn" data-k="create">${ic('plus', 20)}<span>Новый продукт</span></button></div>` : ''}
       <div class="tabs" data-k="tabs">${[['search', 'Все'], ['recent', 'Недавние'], ['fav', 'Избранное'], ['mine', 'Мои'], ['dishes', 'Блюда']].map(([k, n]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
@@ -299,13 +332,16 @@ function openFoodPicker(ctx) {
     else if (tab === 'dishes') list = Object.values(D.recipes).map(recipeAsFood);
     else list = [...D.meta.recent.slice(0, 8).map(findFood).filter(Boolean), ...searchFoods('', 60).filter((f) => !D.meta.recent.slice(0, 8).includes(f.id))];
     if (ctx.exclude) list = list.filter((f) => f.id !== ctx.exclude);
-    res.innerHTML = list.length ? list.map(foodRowHTML).join('') : `<div class="empty sm">${ic('search', 24)}<b>В базе FORMA нет</b><p>${OnlineFoods.available() && norm(q).length >= 3 ? 'Ищу в интернете ниже — или создайте продукт сами.' : 'Создайте продукт сами или отсканируйте штрихкод.'}</p><button class="btn sm" data-k2="create">Создать продукт${q ? ` «${esc(q.slice(0, 30))}»` : ''}</button></div>`;
+    const aiBtn = ctx.mode === 'diary' && q.trim().length >= 2 ? `<button class="btn sm" data-k2="aitext">${ic('spark', 16)}Оценить «${esc(q.slice(0, 30))}» через AI</button>` : '';
+    res.innerHTML = list.length ? list.map(foodRowHTML).join('') + (aiBtn ? `<div class="ai-hint muted sm">Нет нужного варианта? ${aiBtn}</div>` : '')
+      : `<div class="empty sm">${ic('search', 24)}<b>В базе FORMA нет</b><p>${OnlineFoods.available() && norm(q).length >= 3 ? 'Ищу в интернете ниже — или оцените блюдо через AI, или создайте продукт сами.' : 'Оцените блюдо через AI, создайте продукт сами или отсканируйте штрихкод.'}</p><div class="row gap8 wrap center">${aiBtn}<button class="btn sm" data-k2="create">Создать продукт${q ? ` «${esc(q.slice(0, 30))}»` : ''}</button></div></div>`;
     OnlineFoods.attach(res, q, online);
   };
   inp.addEventListener('input', () => { q = inp.value; draw(); });
   s.querySelector('[data-k=tabs]').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (!b) return; tab = b.dataset.tab; q = ''; inp.value = ''; s.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
   res.addEventListener('click', (e) => {
     const c = e.target.closest('[data-k2=create]'); if (c) { openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }); return; }
+    if (e.target.closest('[data-k2=aitext]')) { Sheet.close(); ACT.aiText({ dataset: { date: ctx.date, meal: ctx.meal, q } }); return; }
     const fav = e.target.closest('[data-fav]'); if (fav) { e.stopPropagation(); toggleFav(fav.dataset.fav); draw(); return; }
     const row = e.target.closest('[data-food]'); if (row) { let f = findFood(row.dataset.food); if (!f && online.has(row.dataset.food)) f = saveExternalFood(online.get(row.dataset.food)); if (f) openAmount(f, ctx); }
   });
@@ -313,6 +349,7 @@ function openFoodPicker(ctx) {
   on('scan', () => { Sheet.closeAll(); App.scanCtx = { date: ctx.date, meal: ctx.meal }; go('scan'); });
   on('photo', () => { Sheet.close(); ACT.aiPhoto({ dataset: { date: ctx.date, meal: ctx.meal } }); });
   on('quick', () => { Sheet.close(); ACT.quickAdd({ dataset: { date: ctx.date, meal: ctx.meal } }); });
+  on('aitext', () => { Sheet.close(); ACT.aiText({ dataset: { date: ctx.date, meal: ctx.meal, q } }); });
   on('create', () => openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }));
   draw(); setTimeout(() => { if (window.innerWidth > 700) inp.focus(); }, 120);
 }
@@ -333,7 +370,7 @@ const OnlineFoods = {
   },
   attach(res, q, online) {
     clearTimeout(this.timer); const my = ++this.seq;
-    if (!q || norm(q).length < 3 || /^d+$/.test(q.trim()) || !this.available()) return;
+    if (!q || norm(q).length < 3 || /^\d+$/.test(q.trim()) || !this.available()) return;
     const box = document.createElement('div'); box.className = 'online-res';
     box.innerHTML = `<div class="online-h">${ic('search', 14)}В интернете · Open Food Facts</div><p class="muted sm online-st">Ищу…</p>`;
     res.appendChild(box);
@@ -421,7 +458,7 @@ function openAmount(food, ctx) {
 function addToDiary(date, meal, food, g) {
   const day = ensureDay(date);
   day.meals[meal].push({ id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) });
-  saveDay(date); if (food.id && !String(food.id).startsWith('q_')) pushRecent(food.id);
+  saveDay(date); if (food.id && !/^(q_|ai_)/.test(String(food.id))) pushRecent(food.id);
 }
 ACT.itemEdit = (el) => {
   const date = App.diaryDate; const day = ensureDay(date); const it = day.meals[el.dataset.meal].find((x) => x.id === el.dataset.id); if (!it) return;

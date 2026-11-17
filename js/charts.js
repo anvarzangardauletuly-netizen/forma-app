@@ -25,9 +25,10 @@ const Charts = {
     </div>`;
   },
 
-  bar(value, max, color = 'var(--accent)') {
+  /* overOk: превышение цели — это хорошо (шаги, вода, клетчатка), полоска не краснеет */
+  bar(value, max, color = 'var(--accent)', overOk = false) {
     const pct = max > 0 ? clamp(value / max * 100, 0, 100) : 0;
-    return `<div class="pbar"><i style="width:${pct}%;background:${value > max * 1.05 && max > 0 ? 'var(--over)' : color}"></i></div>`;
+    return `<div class="pbar"><i style="width:${pct}%;background:${!overOk && value > max * 1.05 && max > 0 ? 'var(--over)' : color}"></i></div>`;
   },
 
   _frame(el, height) {

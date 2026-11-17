@@ -7,7 +7,8 @@
 
 function stepsSummaryHTML(day, T, burned) {
   const sp = dayStepParts(day);
-  return `<div class="bignum"><span data-live="steps">${fmt(day.steps)}</span><small> из ${fmt(T.steps)}</small></div>${Charts.bar(day.steps, T.steps, 'var(--accent)')}
+  const done = day.steps >= T.steps;
+  return `<div class="bignum"><span data-live="steps">${fmt(day.steps)}</span><small> из ${fmt(T.steps)}</small>${done ? ' <span class="tag ok">цель выполнена</span>' : ''}</div>${Charts.bar(day.steps, T.steps, 'var(--accent)', true)}
     <div class="step-split mt8"><span><i class="sw"></i>Ходьба ${fmt(sp.walk)} · ${fmt(sp.kmWalk, 1)} км</span>${sp.run ? `<span><i class="sr"></i>Бег ${fmt(sp.run)} · ${fmt(sp.kmRun, 1)} км</span>` : ''}</div>
     <p class="muted sm mt8">≈ ${fmt(burned.steps)} ккал${settings().stepsInBudget !== false && burned.stepsExtra >= 1 ? ` · +${fmt(burned.stepsExtra)} ккал к норме` : ''}</p>`;
 }
@@ -245,10 +246,10 @@ PAGES.steps = {
     <div class="pagehead"><div><h1>Шаги и бег</h1><p class="muted">Ходьба и бег считаются отдельно. Тряска в транспорте не засчитывается.</p></div></div>
     <div class="grid g2">
       <section class="card fade">
-        <div class="card-h"><h3>${ic('steps', 18)}Сегодня</h3><span class="muted">цель ${fmt(T.steps)}</span></div>
+        <div class="card-h"><h3>${ic('steps', 18)}Сегодня</h3><button class="link-btn" data-act="stepsGoalEdit">цель ${fmt(T.steps)} ${ic('edit', 14)}</button></div>
         ${day.steps != null ? stepsSummaryHTML(day, T, burned) : '<div class="bignum"><span data-live="steps">0</span><small> шагов</small></div><p class="muted sm mt8">Пока нет данных за сегодня.</p>'}
         ${avg7 != null ? `<p class="muted sm">В среднем за 7 дней: ${fmt(avg7)} шагов</p>` : ''}
-        <div class="row gap8 mt12 wrap"><button class="btn sm" data-act="stepsEdit">Изменить вручную</button></div>
+        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${ic('edit', 16)}${day.steps != null ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="stepsGoalEdit">${ic('flame', 16)}Цель шагов</button></div>
       </section>
 
       <section class="card fade pd-card ${Pedo.on ? 'live' : ''}">
