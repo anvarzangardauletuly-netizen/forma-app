@@ -446,7 +446,7 @@ const FOOD_ALIASES = [
   [/творог|творож/, 'творог творожный'],
   [/плов/, 'плов'], [/бургер|чизбургер|гамбургер|воппер|мак/, 'бургер'],
 ];
-function stemRu(w) { return w.length >= 4 ? w.slice(0, Math.max(3, w.length - 3)) : w; }
+function stemRu(w) { if (/^я[йи]ц/.test(w)) return 'яйц'; return w.length >= 6 ? w.slice(0, Math.max(4, w.length - 3)) : w.length === 5 ? w.slice(0, 4) : w; }
 /* основа слова должна стоять в начале какого-то слова: «сник(ерс)» не должно находить «бру-сник-а» */
 const hasStem = (hay, w) => (' ' + hay).includes(' ' + stemRu(w));
 function foodHay(f) {
@@ -464,11 +464,12 @@ function searchFoods(q, limit = 60) {
   const scored = [];
   for (const f of list) {
     const hay = foodHay(f); let exact = 0; let ok = true;
-    for (const w of words) { if (hay.includes(w)) exact++; else if (!hasStem(hay, w)) { ok = false; break; } }
+    const sp = ' ' + hay; // слово должно начинаться так, как в запросе: «кола» не должно находить «шоколад»
+    for (const w of words) { if (sp.includes(' ' + w)) exact++; else if (!hasStem(hay, w)) { ok = false; break; } }
     if (!ok) continue;
     const nn = norm(f.name);
     let s = exact * 3; if (nn.startsWith(nq)) s += 10; if (words.some((w) => nn.startsWith(w) || nn.startsWith(stemRu(w)))) s += 5; if (f.custom || f.recipe) s += 3;
-    if (words.every((w) => nn.includes(w) || hasStem(nn, w))) s += 4; // все слова — в самом названии
+    if (words.every((w) => (' ' + nn).includes(' ' + w) || hasStem(nn, w))) s += 4; // все слова — в самом названии
     if (f.store) s -= 2 - Math.min(1.5, Math.log10(1 + f.pop) / 2); // общие продукты выше товаров, популярные товары выше редких
     if (D.meta.favorites.includes(f.id)) s += 2; s -= nn.length / 100;
     scored.push([s, f]);
