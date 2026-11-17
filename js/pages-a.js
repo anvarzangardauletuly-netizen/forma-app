@@ -269,7 +269,7 @@ function mealCardHTML(day, m, date) {
       <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
     ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
       <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
-        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${fmt(it.g)} г${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} г${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
         <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
   </section>`;
 }
@@ -410,59 +410,102 @@ function foodRowHTML(f) {
 }
 
 /* ---------- Количество продукта (добавление / редактирование) ---------- */
+/* Единица для счёта «штуками/порциями»: из подписи порции («1 яйцо», «2 яйца» → 1 шт = половина, «стакан», «тарелка»…) */
+function foodUnit(food) {
+  const pt = food && food.portion; if (!pt || !(pt.g > 0)) return null;
+  const label = String(pt.label || '').trim(); if (!label || label === '100 г') return null;
+  const m = label.match(/^(\d+)(?:\s*[–-]\s*\d+)?\s*(.*)$/);
+  if (m) {
+    const n = +m[1]; const rest = m[2].trim();
+    const name = /яйц/.test(rest) ? 'яйцо' : /шт/.test(rest) || !rest ? 'шт' : n > 1 ? 'шт' : rest;
+    return { g: r1(pt.g / Math.max(1, n)), name };
+  }
+  return { g: pt.g, name: label };
+}
+function unitText(u, n) { return `${fmt(n, 2)} × ${u.name}`; }
 function openAmount(food, ctx) {
-  const editing = ctx.item; let g = editing ? editing.g : (food.portion && food.portion.g) || 100;
-  let meal = ctx.meal; const mode = ctx.mode || 'diary';
+  const editing = ctx.item; let meal = ctx.meal; const mode = ctx.mode || 'diary';
+  const unit = foodUnit(food) || (editing && editing.unit) || null;
+  let useUnit = !!unit && (editing ? !!editing.unit : true);
+  let g = editing ? editing.g : (unit ? unit.g : 100);
+  let cnt = editing && editing.unit ? editing.unit.n : 1;
   const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
   const s = Sheet.open({
     title: editing ? 'Изменить запись' : food.name,
     body: `${editing ? `<p class="lead">${esc(food.name)}</p>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? esc(food.brand) + ' · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
-      <div class="amount"><button class="icon-btn soft lg" data-k="m">${ic('minus')}</button>
-        <label class="amount-in"><input class="input big" data-k="g" inputmode="decimal" value="${g}" aria-label="Граммы"><span>г</span></label>
-        <button class="icon-btn soft lg" data-k="p">${ic('plus')}</button></div>
-      <div class="chips">${chips.map((c) => `<button class="chip" data-g="${c}">${c === (food.portion && food.portion.g) && !/\d/.test(food.portion.label) ? esc(food.portion.label) + ' · ' : ''}${c} г</button>`).join('')}
-        ${food.portion && food.portion.g ? `<button class="chip" data-g="${food.portion.g * 2}">×2 порции</button>` : ''}</div>
+      ${unit ? `<div class="seg mt8" data-k="modes"><button class="${useUnit ? 'on' : ''}" data-m="u">Штуки / порции</button><button class="${useUnit ? '' : 'on'}" data-m="g">Граммы</button></div>` : ''}
+      <div data-k="uBox" ${useUnit ? '' : 'hidden'}>
+        <div class="amount"><button class="icon-btn soft lg" data-k="um">${ic('minus')}</button>
+          <label class="amount-in"><input class="input big" data-k="n" inputmode="decimal" value="${cnt}" aria-label="Количество"><span>${unit ? '× ' + esc(unit.name) : ''}</span></label>
+          <button class="icon-btn soft lg" data-k="up">${ic('plus')}</button></div>
+        <p class="muted sm center">${unit ? `1 ${esc(unit.name)} ≈ ${fmt(unit.g)} г` : ''} · <span data-k="ug"></span></p>
+        <div class="chips">${[0.5, 1, 2, 3, 4, 5].map((n) => `<button class="chip" data-n="${n}">${n === 0.5 ? '½' : n}</button>`).join('')}</div>
+      </div>
+      <div data-k="gBox" ${useUnit ? 'hidden' : ''}>
+        <div class="amount"><button class="icon-btn soft lg" data-k="m">${ic('minus')}</button>
+          <label class="amount-in"><input class="input big" data-k="g" inputmode="decimal" value="${g}" aria-label="Граммы"><span>г</span></label>
+          <button class="icon-btn soft lg" data-k="p">${ic('plus')}</button></div>
+        <div class="chips">${chips.map((c) => `<button class="chip" data-g="${c}">${c === (food.portion && food.portion.g) && !/\d/.test(food.portion.label) ? esc(food.portion.label) + ' · ' : ''}${c} г</button>`).join('')}</div>
+      </div>
       ${mode === 'diary' ? `<div class="seg mt12" data-k="meals">${MEALS.map((m) => `<button class="${m.id === meal ? 'on' : ''}" data-meal="${m.id}">${m.name}</button>`).join('')}</div>` : ''}
       <div class="preview" data-k="prev"></div>`,
     foot: `${editing ? `<button class="btn ghost danger-t" data-k="del">${ic('trash', 16)}Удалить</button>` : `<button class="icon-btn fav ${isFav(food.id) ? 'on' : ''}" data-k="fav" aria-label="В избранное">${ic('star')}</button>`}
       <button class="btn primary grow" data-k="ok">${editing ? 'Сохранить' : (mode === 'diary' ? 'Добавить в дневник' : 'Добавить')}</button>`,
   });
-  const inp = s.querySelector('[data-k=g]'); const prev = s.querySelector('[data-k=prev]');
+  const inp = s.querySelector('[data-k=g]'); const nIn = s.querySelector('[data-k=n]'); const prev = s.querySelector('[data-k=prev]');
+  const grams = () => (useUnit ? (num(nIn.value) || 0) * unit.g : num(inp.value));
   const upd = () => {
-    const v = num(inp.value); const ok = Number.isFinite(v) && v > 0 && v <= 5000; inp.classList.toggle('invalid', !ok);
+    const v = grams(); const ok = Number.isFinite(v) && v > 0 && v <= 5000;
+    (useUnit ? nIn : inp).classList.toggle('invalid', !ok);
+    if (useUnit) { s.querySelector('[data-k=ug]').textContent = ok ? `всего ${fmt(v)} г` : 'укажите количество'; }
     const n = scaleN(food.per, ok ? v : 0);
     prev.innerHTML = `<div class="pv-k"><b>${fmt(n.kcal)}</b><span>ккал</span></div><div><b>${fmt(n.p, 1)}</b><span>белки</span></div><div><b>${fmt(n.f, 1)}</b><span>жиры</span></div><div><b>${fmt(n.c, 1)}</b><span>углеводы</span></div>`;
-    s.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', +c.dataset.g === v));
+    s.querySelectorAll('[data-g]').forEach((c) => c.classList.toggle('on', +c.dataset.g === num(inp.value)));
+    s.querySelectorAll('[data-n]').forEach((c) => c.classList.toggle('on', +c.dataset.n === num(nIn.value)));
   };
-  inp.addEventListener('input', upd);
+  inp.addEventListener('input', upd); nIn.addEventListener('input', upd);
   s.querySelector('[data-k=m]').onclick = () => { inp.value = Math.max(1, r0((num(inp.value) || 0) - 10)); upd(); };
   s.querySelector('[data-k=p]').onclick = () => { inp.value = r0((num(inp.value) || 0) + 10); upd(); };
-  s.querySelectorAll('.chip').forEach((c) => { c.onclick = () => { inp.value = c.dataset.g; upd(); }; });
+  s.querySelector('[data-k=um]').onclick = () => { const v = num(nIn.value) || 0; nIn.value = v > 1 ? Math.round((v - 1) * 10) / 10 : 0.5; upd(); };
+  s.querySelector('[data-k=up]').onclick = () => { const v = num(nIn.value) || 0; nIn.value = v < 1 ? 1 : Math.round((v + 1) * 10) / 10; upd(); };
+  s.querySelectorAll('[data-g]').forEach((c) => { c.onclick = () => { inp.value = c.dataset.g; upd(); }; });
+  s.querySelectorAll('[data-n]').forEach((c) => { c.onclick = () => { nIn.value = c.dataset.n; upd(); }; });
+  const modes = s.querySelector('[data-k=modes]');
+  if (modes) modes.onclick = (e) => {
+    const b = e.target.closest('[data-m]'); if (!b) return; const v = grams();
+    useUnit = b.dataset.m === 'u';
+    if (useUnit && v > 0) nIn.value = Math.round(v / unit.g * 10) / 10; else if (!useUnit && v > 0) inp.value = r0(v);
+    modes.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    s.querySelector('[data-k=uBox]').hidden = !useUnit; s.querySelector('[data-k=gBox]').hidden = useUnit; upd();
+  };
   const segs = s.querySelector('[data-k=meals]'); if (segs) segs.onclick = (e) => { const b = e.target.closest('[data-meal]'); if (!b) return; meal = b.dataset.meal; segs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
   const fav = s.querySelector('[data-k=fav]'); if (fav) fav.onclick = () => { toggleFav(food.id); fav.classList.toggle('on', isFav(food.id)); toast(isFav(food.id) ? 'Добавлено в избранное' : 'Убрано из избранного'); };
   const del = s.querySelector('[data-k=del]'); if (del) del.onclick = () => { ctx.onDelete && ctx.onDelete(); Sheet.close(); };
   s.querySelector('[data-k=ok]').onclick = () => {
-    const v = num(inp.value); if (!(v > 0 && v <= 5000)) { markInvalid(inp, 'Укажите вес от 1 до 5000 г'); return; }
-    if (ctx.onDone) { Sheet.close(); if (ctx.fromPicker) Sheet.close(); ctx.onDone(food, r1(v), meal); return; }
+    const v = grams(); if (!(v > 0 && v <= 5000)) { markInvalid(useUnit ? nIn : inp, useUnit ? 'Укажите количество (всего до 5000 г)' : 'Укажите вес от 1 до 5000 г'); return; }
+    const u = useUnit ? { n: num(nIn.value), name: unit.name, g: unit.g } : null;
+    if (ctx.onDone) { Sheet.close(); if (ctx.fromPicker) Sheet.close(); ctx.onDone(food, r1(v), meal, u); return; }
     if (editing) {
       const day = ensureDay(ctx.date); const from = day.meals[ctx.meal]; const it = from.find((x) => x.id === editing.id);
-      if (it) { it.g = r1(v); if (meal !== ctx.meal) { day.meals[ctx.meal] = from.filter((x) => x.id !== it.id); day.meals[meal].push(it); } }
+      if (it) { it.g = r1(v); if (u) it.unit = u; else delete it.unit; if (meal !== ctx.meal) { day.meals[ctx.meal] = from.filter((x) => x.id !== it.id); day.meals[meal].push(it); } }
       saveDay(ctx.date); Sheet.closeAll(); render(); toast('Сохранено');
     } else {
-      addToDiary(ctx.date, meal, food, r1(v)); Sheet.closeAll(); render();
-      toast(`${food.name} — ${fmt(v)} г добавлено в «${MEALS.find((m) => m.id === meal).name}»`);
+      addToDiary(ctx.date, meal, food, r1(v), u); Sheet.closeAll(); render();
+      toast(`${food.name} — ${u ? unitText(u, u.n) + ' (' + fmt(v) + ' г)' : fmt(v) + ' г'} добавлено в «${MEALS.find((m) => m.id === meal).name}»`);
     }
   };
   upd();
+  setTimeout(() => { const f = useUnit ? nIn : inp; if (window.innerWidth > 700) f.select(); }, 150);
 }
-function addToDiary(date, meal, food, g) {
+function addToDiary(date, meal, food, g, unit = null) {
   const day = ensureDay(date);
-  day.meals[meal].push({ id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) });
+  const it = { id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) }; if (unit) it.unit = unit;
+  day.meals[meal].push(it);
   saveDay(date); if (food.id && !/^(q_|ai_)/.test(String(food.id))) pushRecent(food.id);
 }
 ACT.itemEdit = (el) => {
   const date = App.diaryDate; const day = ensureDay(date); const it = day.meals[el.dataset.meal].find((x) => x.id === el.dataset.id); if (!it) return;
-  const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, portion: (findFood(it.ref) || {}).portion };
+  const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, portion: (findFood(it.ref) || {}).portion || (it.unit ? { g: it.unit.g, label: '1 ' + it.unit.name } : null) };
   openAmount(food, { date, meal: el.dataset.meal, item: it, onDelete: () => { day.meals[el.dataset.meal] = day.meals[el.dataset.meal].filter((x) => x.id !== it.id); saveDay(date); render(); toast('Удалено'); } });
 };
 

@@ -512,3 +512,4 @@ body.onb-mode #view { padding-top: calc(16px + env(safe-area-inset-top)); }
 .prose h4 { margin-top: 14px; } .prose p { font-size: 14px; line-height: 1.55; }
 
 [hidden] { display: none !important; }
+p.center, .muted.center { text-align: center; }
