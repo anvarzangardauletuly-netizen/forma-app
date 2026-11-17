@@ -1,0 +1,630 @@
+/* ============================================================
+   FORMA — страницы: Главная, Дневник питания, База продуктов
+   ============================================================ */
+'use strict';
+
+const App = { page: 'dashboard', diaryDate: todayISO(), statsRange: 30, weightRange: 30, foodCat: 'all', foodQ: '', foodLimit: 80, woTab: 'programs', calMonth: null, plannerTab: 'week', planDay: 1 };
+const PAGES = {};
+
+const macroLine = (n) => `<span class="mac"><i class="dp"></i>Б ${fmt(n.p, 1)}</span><span class="mac"><i class="df"></i>Ж ${fmt(n.f, 1)}</span><span class="mac"><i class="dc"></i>У ${fmt(n.c, 1)}</span>`;
+const emptyState = (icon, title, text, btn = '') => `<div class="empty">${ic(icon, 28)}<b>${title}</b><p>${text}</p>${btn}</div>`;
+
+/* ============================================================
+   ГЛАВНАЯ
+   ============================================================ */
+PAGES.dashboard = {
+  title: 'Главная', icon: 'home',
+  render() {
+    const date = todayISO(); const day = getDay(date); const t = dayTotals(day); const T = targets();
+    const budget = dayBudget(date); const burned = dayBurned(date); const left = budget - t.kcal;
+    const name = (D.profile && D.profile.name) || '';
+    const h = new Date().getHours(); const hi = h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
+    const weights = [...D.weights.entries].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const lastW = weights[weights.length - 1];
+    const w30 = weights.filter((e) => e.date >= addDays(date, -30));
+    const wDelta = w30.length > 1 ? w30[w30.length - 1].kg - w30[0].kg : null;
+    const recentWo = Object.values(D.workouts).sort((a, b) => (a.date + a.end < b.date + b.end ? 1 : -1)).slice(0, 3);
+    const stepsOn = day.steps != null;
+    const glasses = Math.ceil(T.water / 250);
+    const recs = recommendations();
+
+    return `
+    <div class="hello"><div><h1>${hi}${name ? ', ' + esc(name) : ''}</h1><p class="muted">${WD_FULL[new Date().getDay()]}, ${fmtDate(date, { full: true })}</p></div>
+      <button class="btn primary hide-sm" data-act="pick" data-meal="${autoMeal()}" data-date="${date}">${ic('plus', 18)}Добавить еду</button></div>
+    ${PWA.bannerHTML()}
+
+    <section class="card hero fade">
+      <div class="hero-main">
+        ${Charts.ring({ value: t.kcal, max: budget, size: 184, stroke: 14, label: fmt(Math.abs(left)), sub: left >= 0 ? 'ккал осталось' : 'ккал сверх нормы', over: left < 0 })}
+        <div class="hero-stats">
+          <div><span class="muted">Съедено</span><b>${fmt(t.kcal)}</b><small>ккал</small></div>
+          <div><span class="muted">Норма</span><b>${fmt(budget)}</b><small>ккал${budget !== T.kcal ? ' (+ активность)' : ''}</small></div>
+          <div><span class="muted">Сожжено</span><b>${fmt(burned.total)}</b><small>ккал ≈</small></div>
+        </div>
+      </div>
+      <div class="hero-macros">
+        ${[['p', 'Белки', 'var(--cp)'], ['f', 'Жиры', 'var(--cf)'], ['c', 'Углеводы', 'var(--cc)']].map(([k, n, col]) => `
+          <div class="macro">${Charts.ring({ value: t[k], max: T[k], size: 76, stroke: 7, color: col, label: fmt(t[k]), sub: 'из ' + fmt(T[k]) })}<span>${n}</span></div>`).join('')}
+        <div class="macro">${Charts.ring({ value: t.fib, max: T.fib, size: 76, stroke: 7, color: 'var(--muted)', label: fmt(t.fib), sub: 'из ' + fmt(T.fib) })}<span>Клетчатка</span></div>
+      </div>
+    </section>
+
+    ${Discipline.cardHTML()}
+
+    <div class="grid g3">
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('fork', 18)}Приёмы пищи</h3><a href="#diary" class="link">Дневник</a></div>
+        <div class="meal-rows">${MEALS.map((m) => {
+          const mt = mealTotals(day, m.id); const cnt = (day.meals[m.id] || []).length;
+          return `<div class="meal-row"><span class="chk ${cnt ? 'on' : ''}">${cnt ? ic('check', 14) : ''}</span>
+            <div class="grow"><b>${m.name}</b><small class="muted">${cnt ? `${cnt} ${plural(cnt, 'продукт', 'продукта', 'продуктов')} · ${fmt(mt.kcal)} ккал` : 'ещё не добавлено'}</small></div>
+            <button class="icon-btn soft" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить в ${m.name}">${ic('plus', 18)}</button></div>`;
+        }).join('')}</div>
+      </section>
+
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('drop', 18)}Вода</h3><span class="muted">${fmt(day.water)} / ${fmt(T.water)} мл</span></div>
+        <div class="glasses">${Array.from({ length: Math.min(glasses, 12) }, (_, i) => `<span class="glass ${day.water >= (i + 1) * 250 ? 'on' : ''}"></span>`).join('')}</div>
+        ${Charts.bar(day.water, T.water, 'var(--cw)')}
+        <div class="row gap8 mt12"><button class="btn sm" data-act="water" data-v="250">+250 мл</button><button class="btn sm" data-act="water" data-v="500">+500</button><button class="btn sm ghost" data-act="water" data-v="-250">−250</button><button class="btn sm ghost" data-act="waterCustom">Своё</button></div>
+      </section>
+
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('steps', 18)}Шаги</h3><a href="#steps" class="link">${Pedo.on ? '● идёт подсчёт' : 'Подробнее'}</a></div>
+        ${stepsOn ? stepsSummaryHTML(day, T, burned)
+          : `<p class="muted">Сегодня шагов пока нет. Включите шагомер или перенесите шаги из приложения «Здоровье».</p>`}
+        <div class="row gap8 mt12 wrap"><button class="btn sm ${Pedo.on ? '' : 'primary'}" data-act="pedometer">${Pedo.on ? 'Остановить' : 'Шагомер'}</button><button class="btn sm" data-act="stepsEdit">${stepsOn ? 'Изменить' : 'Ввести'}</button></div>
+      </section>
+
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('flame', 18)}Активность</h3><button class="icon-btn soft" data-act="activityAdd" data-date="${date}" aria-label="Добавить активность">${ic('plus', 18)}</button></div>
+        ${(day.activities || []).length || workoutsOn(date).length ? `<div class="list">${(day.activities || []).map((a) => `<div class="li"><div class="grow"><b>${esc(a.name)}</b><small class="muted">${a.min} мин</small></div><span>${fmt(a.kcal)} ккал</span><button class="icon-btn" data-act="activityDel" data-id="${a.id}" data-date="${date}" aria-label="Удалить">${ic('x', 16)}</button></div>`).join('')}
+          ${workoutsOn(date).map((w) => `<div class="li"><div class="grow"><b>${esc(w.name)}</b><small class="muted">тренировка · ${w.durationMin} мин</small></div><span>${fmt(workoutKcal(w))} ккал</span></div>`).join('')}</div>`
+          : `<p class="muted">Пока ничего. Добавьте прогулку, спорт или проведите тренировку.</p>`}
+        <p class="muted sm mt8">Итого ≈ ${fmt(burned.total)} ккал (оценка по MET).</p>
+      </section>
+
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('scale', 18)}Вес</h3><a href="#weight" class="link">История</a></div>
+        ${lastW ? `<div class="row between end"><div class="bignum">${fmt(lastW.kg, 1)}<small> кг</small></div>${Charts.spark(weights.slice(-20).map((e) => e.kg), 'var(--accent-ink)')}</div>
+          <p class="muted sm">${wDelta != null ? `За 30 дней: <b>${wDelta > 0 ? '+' : ''}${fmt(wDelta, 1)} кг</b>` : 'Добавьте ещё измерения для динамики'} · ${fmtDate(lastW.date)}</p>`
+          : `<p class="muted">Нет записей веса.</p>`}
+        <button class="btn sm mt12" data-act="weightAdd">${ic('plus', 16)}Записать вес</button>
+      </section>
+
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('dumbbell', 18)}Тренировки</h3><a href="#workouts" class="link">Все</a></div>
+        ${D.active ? `<div class="banner">Идёт тренировка: <b>${esc(D.active.name)}</b><button class="btn sm primary" data-act="woOpen">Продолжить</button></div>` : ''}
+        ${recentWo.length ? `<div class="list">${recentWo.map((w) => `<div class="li"><div class="grow"><b>${esc(w.name)}</b><small class="muted">${fmtDate(w.date)} · ${w.durationMin} мин · ${w.exercises.length} упр.</small></div><span class="muted">${fmt(woVolume(w))} кг</span></div>`).join('')}</div>`
+          : `<p class="muted">Тренировок пока нет.</p>`}
+        ${!D.active ? `<button class="btn sm mt12" data-act="woStartPick">${ic('play', 16)}Начать тренировку</button>` : ''}
+      </section>
+    </div>
+
+    <div class="grid g2">
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('chart', 18)}Неделя</h3><a href="#stats" class="link">Аналитика</a></div>
+        <div class="chart-box" id="dashWeek"></div>
+        ${weekSummaryHTML()}
+      </section>
+      <section class="card fade">
+        <div class="card-h"><h3>${ic('spark', 18)}Рекомендации</h3><a href="#ai" class="link">AI-помощник</a></div>
+        ${recs.length ? `<ul class="recs">${recs.map((r) => `<li>${ic(r.icon, 18)}<span>${r.text}</span></li>`).join('')}</ul>` : '<p class="muted">Заполняйте дневник несколько дней — здесь появятся персональные подсказки.</p>'}
+      </section>
+    </div>`;
+  },
+  mount() {
+    const days = rangeDays(addDays(todayISO(), -6), todayISO());
+    Charts.mount($('#dashWeek'), (el) => Charts.bars(el, {
+      labels: days.map((d) => WD[parseISO(d).getDay()]), tipLabels: days.map((d) => fmtDate(d)),
+      values: days.map((d) => (D.days[d] && dayHasFood(D.days[d]) ? r0(dayTotals(D.days[d]).kcal) : 0)), target: targets().kcal, unit: 'ккал', height: 180,
+      empty: 'Нет записей питания за неделю',
+    }));
+  },
+};
+
+function plural(n, a, b, c) { n = Math.abs(n) % 100; const n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
+function autoMeal() { const h = new Date().getHours(); return h < 11 ? 'breakfast' : h < 16 ? 'lunch' : h < 21 ? 'dinner' : 'snack'; }
+function woVolume(w) { return (w.exercises || []).reduce((s, e) => s + (e.sets || []).filter((x) => x.done).reduce((a, x) => a + (+x.reps || 0) * (+x.w || 0), 0), 0); }
+
+function weekSummaryHTML() {
+  const days = rangeDays(addDays(todayISO(), -6), todayISO());
+  const logged = days.filter((d) => D.days[d] && dayHasFood(D.days[d]));
+  if (!logged.length) return '';
+  const avg = logged.reduce((a, d) => addN(a, dayTotals(D.days[d])), zeroN()); NK.forEach((k) => { avg[k] /= logged.length; });
+  const wo = Object.values(D.workouts).filter((w) => w.date >= days[0]).length;
+  const water = days.reduce((s, d) => s + (D.days[d] ? D.days[d].water : 0), 0) / 7;
+  return `<div class="kpis">
+    <div><span class="muted">Ср. ккал</span><b>${fmt(avg.kcal)}</b></div><div><span class="muted">Ср. белок</span><b>${fmt(avg.p)} г</b></div>
+    <div><span class="muted">Тренировок</span><b>${wo}</b></div><div><span class="muted">Ср. вода</span><b>${fmt(water / 1000, 1)} л</b></div></div>`;
+}
+
+/* Персональные рекомендации — детерминированные правила по фактическим данным */
+function recommendations() {
+  const out = []; const T = targets(); const t0 = todayISO();
+  const days = rangeDays(addDays(t0, -6), addDays(t0, -1)).filter((d) => D.days[d] && dayHasFood(D.days[d]));
+  if (days.length >= 3) {
+    const avg = days.reduce((a, d) => addN(a, dayTotals(D.days[d])), zeroN()); NK.forEach((k) => { avg[k] /= days.length; });
+    if (avg.p < T.p * 0.85) out.push({ icon: 'info', text: `Белок в среднем ${fmt(avg.p)} г при цели ${fmt(T.p)} г. Добавьте творог, яйца, курицу, рыбу или бобовые.` });
+    if (avg.fib < T.fib * 0.7) out.push({ icon: 'info', text: `Клетчатки ${fmt(avg.fib)} г в день — меньше цели (${fmt(T.fib)} г). Помогут овощи, крупы, бобовые, ягоды.` });
+    if (avg.kcal > T.kcal * 1.1) out.push({ icon: 'info', text: `Средняя калорийность ${fmt(avg.kcal)} ккал — выше нормы на ${fmt(avg.kcal - T.kcal)}. Посмотрите, какие приёмы пищи самые калорийные.` });
+    if (avg.kcal < T.kcal * 0.75 && avg.kcal > 0) out.push({ icon: 'heart', text: `Вы едите заметно меньше нормы (≈${fmt(avg.kcal)} ккал). Сильный дефицит мешает восстановлению — проверьте, всё ли записано.` });
+    if (avg.salt > 6) out.push({ icon: 'info', text: `Соли ≈${fmt(avg.salt, 1)} г в день (по записанным продуктам) — ВОЗ советует до 5 г.` });
+  } else out.push({ icon: 'book', text: 'Заполните дневник хотя бы 3 дня — рекомендации станут точнее.' });
+  const day = getDay(t0); const h = new Date().getHours();
+  if (h >= 14 && day.water < T.water * 0.4) out.push({ icon: 'drop', text: `Сегодня выпито ${fmt(day.water)} мл из ${fmt(T.water)}. Самое время для стакана воды.` });
+  const lastWo = Object.values(D.workouts).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  if (lastWo && diffDays(lastWo.date, t0) >= 4) out.push({ icon: 'dumbbell', text: `Последняя тренировка была ${diffDays(lastWo.date, t0)} дн. назад.` });
+  if (!D.weights.entries.some((e) => e.date >= addDays(t0, -7))) out.push({ icon: 'scale', text: 'Взвешивайтесь 1–2 раза в неделю утром, в одинаковых условиях — так динамика будет честнее.' });
+  return out.slice(0, 5);
+}
+
+/* ---------- Вода, шаги, активность ---------- */
+ACT.water = (el) => { const d = ensureDay(todayISO()); d.water = Math.max(0, (d.water || 0) + +el.dataset.v); saveDay(todayISO()); render(); };
+ACT.waterCustom = () => {
+  Sheet.open({ title: 'Добавить воду', body: `<form data-sub="waterCustomSave" class="form"><label>Объём, мл<input class="input" name="ml" inputmode="numeric" placeholder="например, 330" autofocus></label><button class="btn primary block">Добавить</button></form>` });
+};
+ACT.waterCustomSave = validated((f) => { const ml = readNum(f, 'ml', { min: -3000, max: 3000, label: 'Объём' }); const d = ensureDay(todayISO()); d.water = Math.max(0, d.water + ml); saveDay(todayISO()); Sheet.close(); render(); });
+ACT.stepsEdit = () => {
+  const d = getDay(todayISO());
+  Sheet.open({ title: 'Шаги за сегодня', body: `<form data-sub="stepsSave" class="form"><label>Количество шагов<input class="input" name="steps" inputmode="numeric" value="${d.steps ?? ''}" placeholder="например, 8500"></label><p class="muted sm">Перепишите значение из приложения телефона или часов. Пустое поле — «нет данных».</p><button class="btn primary block">Сохранить</button></form>` });
+};
+ACT.stepsSave = validated((f) => {
+  const v = readNum(f, 'steps', { min: 0, max: 100000, required: false, label: 'Шаги', int: true });
+  const d = ensureDay(todayISO()); d.steps = v; d.stepsSrc = v == null ? null : 'manual'; saveDay(todayISO()); Sheet.close(); render();
+});
+ACT.activityAdd = (el) => {
+  const date = el.dataset.date || todayISO();
+  Sheet.open({ title: 'Добавить активность', body: `<form data-sub="activitySave" class="form" data-date="${date}">
+    <label>Вид активности<select class="input" name="type">${ACTIVITIES.map((a) => `<option value="${a.id}">${a.name}</option>`).join('')}</select></label>
+    <label>Длительность, мин<input class="input" name="min" inputmode="numeric" placeholder="30"></label>
+    <p class="muted sm">Калории оцениваются по MET × вес (${fmt(curWeight(), 1)} кг) × время. Это приблизительная оценка.</p>
+    <button class="btn primary block">Добавить</button></form>` });
+};
+ACT.activitySave = validated((f) => {
+  const min = readNum(f, 'min', { min: 1, max: 600, label: 'Длительность' });
+  const a = ACTIVITIES.find((x) => x.id === f.type.value);
+  const date = f.dataset.date; const d = ensureDay(date);
+  d.activities.push({ id: uid(), type: a.id, name: a.name, min, kcal: Math.round(a.met * curWeight() * min / 60) });
+  saveDay(date); Sheet.close(); render(); toast('Активность добавлена');
+});
+ACT.activityDel = (el) => { const d = ensureDay(el.dataset.date); d.activities = d.activities.filter((a) => a.id !== el.dataset.id); saveDay(el.dataset.date); render(); };
+
+
+
+/* ============================================================
+   ДНЕВНИК ПИТАНИЯ
+   ============================================================ */
+PAGES.diary = {
+  title: 'Дневник', icon: 'book',
+  render() {
+    const date = App.diaryDate; const day = getDay(date); const t = dayTotals(day); const T = targets(); const budget = dayBudget(date);
+    return `
+    <div class="datebar card">
+      <button class="icon-btn" data-act="diaryShift" data-v="-1" aria-label="Предыдущий день">${ic('left')}</button>
+      <button class="datebtn" data-act="diaryCal"><b>${fmtDate(date)}</b><small>${WD_FULL[parseISO(date).getDay()]}, ${fmtDate(date, { full: true })}</small></button>
+      <button class="icon-btn" data-act="diaryShift" data-v="1" aria-label="Следующий день">${ic('right')}</button>
+    </div>
+
+    <section class="card sumcard">
+      <div class="sumtop"><div><span class="muted">Калории</span><div class="bignum">${fmt(t.kcal)}<small> / ${fmt(budget)}</small></div></div>
+        <div class="right"><span class="muted">${budget - t.kcal >= 0 ? 'Осталось' : 'Сверх нормы'}</span><div class="bignum ${budget - t.kcal < 0 ? 'over-t' : ''}">${fmt(Math.abs(budget - t.kcal))}</div></div></div>
+      ${Charts.bar(t.kcal, budget)}
+      <div class="mgrid mt12">
+        ${[['p', 'Белки', 'var(--cp)'], ['f', 'Жиры', 'var(--cf)'], ['c', 'Углеводы', 'var(--cc)'], ['fib', 'Клетчатка', 'var(--muted)']].map(([k, n, col]) => `<div><div class="row between"><small>${n}</small><small class="muted">${fmt(t[k])}/${fmt(T[k])} г</small></div>${Charts.bar(t[k], T[k], col)}</div>`).join('')}
+      </div>
+      <p class="muted sm mt8">Сахара ${fmt(t.sug, 1)} г · Соль ${fmt(t.salt, 1)} г · Вода ${fmt(day.water)} мл</p>
+    </section>
+
+    ${MEALS.map((m) => mealCardHTML(day, m, date)).join('')}
+
+    <section class="card">
+      <div class="card-h"><h3>${ic('edit', 18)}Заметка дня</h3></div>
+      <textarea class="input" rows="2" data-in="dayNote" placeholder="Самочувствие, сон, особенности дня…" maxlength="500">${esc(day.note || '')}</textarea>
+      <div class="row gap8 wrap mt12">
+        <button class="btn sm" data-act="copyDay">${ic('copy', 16)}Копировать день</button>
+        <button class="btn sm" data-act="quickAdd" data-date="${date}" data-meal="${autoMeal()}">${ic('flame', 16)}Быстрое добавление ккал</button>
+        <button class="btn sm" data-act="aiPhoto" data-date="${date}" data-meal="${autoMeal()}">${ic('camera', 16)}Еда по фото</button>
+      </div>
+    </section>`;
+  },
+};
+function mealCardHTML(day, m, date) {
+  const items = day.meals[m.id] || []; const mt = mealTotals(day, m.id);
+  return `<section class="card meal">
+    <div class="card-h"><div><h3>${ic(m.icon, 18)}${m.name}</h3><small class="muted">${items.length ? `${fmt(mt.kcal)} ккал · Б ${fmt(mt.p)} · Ж ${fmt(mt.f)} · У ${fmt(mt.c)}` : 'Пусто'}</small></div>
+      <div class="row gap4">${items.length ? `<button class="icon-btn" data-act="mealMenu" data-meal="${m.id}" aria-label="Действия с приёмом пищи">${ic('grid', 18)}</button>` : ''}
+      <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
+    ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
+      <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
+        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${fmt(it.g)} г${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
+  </section>`;
+}
+ACT.diaryShift = (el) => { App.diaryDate = addDays(App.diaryDate, +el.dataset.v); render(); };
+let _noteT; ACT.dayNote = (el) => { const d = ensureDay(App.diaryDate); d.note = el.value.slice(0, 500); clearTimeout(_noteT); _noteT = setTimeout(() => saveDay(App.diaryDate), 400); };
+ACT.diaryCal = () => openCalendar({ title: 'Календарь питания', selected: App.diaryDate, onPick: (d) => { App.diaryDate = d; render(); } });
+
+/* Календарь питания/истории — месяц с отметками */
+function openCalendar({ title, selected, onPick, mode = 'food' }) {
+  let month = selected.slice(0, 7);
+  const draw = () => {
+    const [y, mo] = month.split('-').map(Number); const first = new Date(y, mo - 1, 1); const startWd = (first.getDay() + 6) % 7;
+    const daysIn = new Date(y, mo, 0).getDate(); const T = targets();
+    let cells = ''; for (let i = 0; i < startWd; i++) cells += '<span></span>';
+    for (let d = 1; d <= daysIn; d++) {
+      const iso = `${month}-${String(d).padStart(2, '0')}`; const day = D.days[iso];
+      let mark = ''; let cls = '';
+      if (mode === 'food' && day && dayHasFood(day)) { const k = dayTotals(day).kcal; cls = k > T.kcal * 1.05 ? 'm-over' : 'm-ok'; mark = `<small>${fmt(k)}</small>`; }
+      if (mode === 'wo' && workoutsOn(iso).length) { cls = 'm-ok'; mark = `<small>${workoutsOn(iso).length} трен.</small>`; }
+      if (mode === 'act') { const b = dayBurned(iso).total; if (b > 0) { cls = 'm-ok'; mark = `<small>${fmt(b)}</small>`; } }
+      cells += `<button class="cal-d ${cls} ${iso === selected ? 'sel' : ''} ${iso === todayISO() ? 'today' : ''}" data-d="${iso}"><b>${d}</b>${mark}</button>`;
+    }
+    Sheet.setBody(`<div class="cal-h"><button class="icon-btn" data-k="prev">${ic('left')}</button><b>${MONTHS_N[mo - 1]} ${y}</b><button class="icon-btn" data-k="next">${ic('right')}</button></div>
+      <div class="cal-g">${['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((w) => `<span class="cal-w">${w}</span>`).join('')}${cells}</div>
+      ${mode === 'food' ? '<p class="muted sm mt12"><i class="dot ok"></i> в пределах нормы <i class="dot over"></i> выше нормы · число — ккал</p>' : ''}
+      <button class="btn block mt12" data-k="today">Сегодня</button>`);
+    const s = Sheet.top();
+    s.querySelector('[data-k=prev]').onclick = () => { month = isoOf(new Date(y, mo - 2, 1)).slice(0, 7); draw(); };
+    s.querySelector('[data-k=next]').onclick = () => { month = isoOf(new Date(y, mo, 1)).slice(0, 7); draw(); };
+    s.querySelector('[data-k=today]').onclick = () => { Sheet.close(); onPick(todayISO()); };
+    s.querySelectorAll('.cal-d').forEach((b) => { b.onclick = () => { Sheet.close(); onPick(b.dataset.d); }; });
+  };
+  Sheet.open({ title, body: '' }); draw();
+}
+
+/* ---------- Выбор продукта (поиск, недавние, избранное, мои, блюда) ---------- */
+ACT.pick = (el) => openFoodPicker({ date: el.dataset.date || App.diaryDate, meal: el.dataset.meal || autoMeal() });
+function openFoodPicker(ctx) {
+  ctx.mode = ctx.mode || 'diary'; ctx.fromPicker = true; let tab = 'search'; let q = '';
+  const mealName = ctx.mode === 'diary' ? (MEALS.find((m) => m.id === ctx.meal) || {}).name : '';
+  const s = Sheet.open({
+    title: ctx.title || `Добавить: ${mealName}`, wide: true,
+    body: `<div class="search"><span>${ic('search', 18)}</span><input class="input" type="search" placeholder="Поиск продукта или блюда…" data-k="q" autocomplete="off"></div>
+      ${ctx.mode === 'diary' ? `<div class="quick-row">
+        <button class="qbtn" data-k="scan">${ic('scan', 20)}<span>Штрихкод</span></button>
+        <button class="qbtn" data-k="photo">${ic('camera', 20)}<span>Фото еды</span></button>
+        <button class="qbtn" data-k="quick">${ic('flame', 20)}<span>Быстро ккал</span></button>
+        <button class="qbtn" data-k="create">${ic('plus', 20)}<span>Новый продукт</span></button></div>` : ''}
+      <div class="tabs" data-k="tabs">${[['search', 'Все'], ['recent', 'Недавние'], ['fav', 'Избранное'], ['mine', 'Мои'], ['dishes', 'Блюда']].map(([k, n]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
+      <div class="results" data-k="res"></div>`,
+  });
+  const res = s.querySelector('[data-k=res]'); const inp = s.querySelector('[data-k=q]'); const online = new Map();
+  const draw = () => {
+    let list;
+    if (q) list = searchFoods(q, 80);
+    else if (tab === 'recent') list = D.meta.recent.map(findFood).filter(Boolean);
+    else if (tab === 'fav') list = D.meta.favorites.map(findFood).filter(Boolean);
+    else if (tab === 'mine') list = Object.values(D.foods).map(customAsFood);
+    else if (tab === 'dishes') list = Object.values(D.recipes).map(recipeAsFood);
+    else list = [...D.meta.recent.slice(0, 8).map(findFood).filter(Boolean), ...searchFoods('', 60).filter((f) => !D.meta.recent.slice(0, 8).includes(f.id))];
+    if (ctx.exclude) list = list.filter((f) => f.id !== ctx.exclude);
+    res.innerHTML = list.length ? list.map(foodRowHTML).join('') : `<div class="empty sm">${ic('search', 24)}<b>В базе FORMA нет</b><p>${OnlineFoods.available() && norm(q).length >= 3 ? 'Ищу в интернете ниже — или создайте продукт сами.' : 'Создайте продукт сами или отсканируйте штрихкод.'}</p><button class="btn sm" data-k2="create">Создать продукт${q ? ` «${esc(q.slice(0, 30))}»` : ''}</button></div>`;
+    OnlineFoods.attach(res, q, online);
+  };
+  inp.addEventListener('input', () => { q = inp.value; draw(); });
+  s.querySelector('[data-k=tabs]').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (!b) return; tab = b.dataset.tab; q = ''; inp.value = ''; s.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
+  res.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-k2=create]'); if (c) { openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }); return; }
+    const fav = e.target.closest('[data-fav]'); if (fav) { e.stopPropagation(); toggleFav(fav.dataset.fav); draw(); return; }
+    const row = e.target.closest('[data-food]'); if (row) { let f = findFood(row.dataset.food); if (!f && online.has(row.dataset.food)) f = saveExternalFood(online.get(row.dataset.food)); if (f) openAmount(f, ctx); }
+  });
+  const on = (k, fn) => { const b = s.querySelector(`[data-k=${k}]`); if (b) b.onclick = fn; };
+  on('scan', () => { Sheet.closeAll(); App.scanCtx = { date: ctx.date, meal: ctx.meal }; go('scan'); });
+  on('photo', () => { Sheet.close(); ACT.aiPhoto({ dataset: { date: ctx.date, meal: ctx.meal } }); });
+  on('quick', () => { Sheet.close(); ACT.quickAdd({ dataset: { date: ctx.date, meal: ctx.meal } }); });
+  on('create', () => openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }));
+  draw(); setTimeout(() => { if (window.innerWidth > 700) inp.focus(); }, 120);
+}
+/* ---------- Поиск в мировой базе Open Food Facts (миллионы товаров со штрихкодами) ---------- */
+const OnlineFoods = {
+  cache: new Map(), timer: null, seq: 0, calls: [],
+  available() { return !IN_FRAME && navigator.onLine !== false; },
+  async search(q) {
+    const key = norm(q); if (this.cache.has(key)) return this.cache.get(key);
+    const now = Date.now(); this.calls = this.calls.filter((t) => now - t < 60000);
+    if (this.calls.length >= 9) throw { code: 'rate' }; // лимит базы — 10 запросов в минуту
+    this.calls.push(now);
+    const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n&fields=code,product_name,product_name_ru,brands,nutriments,serving_quantity&search_terms=' + encodeURIComponent(q);
+    const r = await withTimeout(fetch(url), 10000); if (!r.ok) throw { code: 'http' };
+    const j = await r.json(); const seen = new Set();
+    const list = (j.products || []).map(offToFood).filter((f) => f && !seen.has(f.name + f.per.kcal) && seen.add(f.name + f.per.kcal));
+    this.cache.set(key, list); return list;
+  },
+  attach(res, q, online) {
+    clearTimeout(this.timer); const my = ++this.seq;
+    if (!q || norm(q).length < 3 || /^d+$/.test(q.trim()) || !this.available()) return;
+    const box = document.createElement('div'); box.className = 'online-res';
+    box.innerHTML = `<div class="online-h">${ic('search', 14)}В интернете · Open Food Facts</div><p class="muted sm online-st">Ищу…</p>`;
+    res.appendChild(box);
+    this.timer = setTimeout(async () => {
+      try {
+        const list = await this.search(q); if (my !== this.seq || !box.isConnected) return;
+        list.forEach((f) => online.set(f.id, f));
+        box.innerHTML = `<div class="online-h">${ic('search', 14)}В интернете · Open Food Facts</div>` + (list.length ? list.map((f) => foodRowHTML(f)).join('') + '<p class="muted sm online-st">Данные открытой базы — сверьте с упаковкой. Выбранный продукт сохранится у вас и будет доступен без интернета.</p>' : '<p class="muted sm online-st">В интернете тоже ничего. Попробуйте другое название или создайте продукт.</p>');
+      } catch (e) {
+        if (my !== this.seq || !box.isConnected) return;
+        box.querySelector('.online-st').textContent = e && e.code === 'rate' ? 'Слишком много поисков подряд — подождите минуту.' : 'Онлайн-база сейчас не отвечает. Попробуйте позже.';
+      }
+    }, 800);
+  },
+};
+function offToFood(p) {
+  const n = p.nutriments || {}; const kcal = n['energy-kcal_100g'] != null ? +n['energy-kcal_100g'] : (n.energy_100g ? n.energy_100g / 4.184 : null);
+  const name = String(p.product_name_ru || p.product_name || '').trim();
+  if (!name || kcal == null || !(kcal >= 0 && kcal <= 950)) return null;
+  const brand = String(Array.isArray(p.brands) ? (p.brands[0] || '') : (p.brands || '')).split(',')[0].trim();
+  return { id: 'off_' + p.code, name, brand, cat: 'custom', barcode: p.code,
+    per: { kcal: r1(kcal), p: r1(+n.proteins_100g || 0), f: r1(+n.fat_100g || 0), c: r1(+n.carbohydrates_100g || 0), fib: r1(+n.fiber_100g || 0), sug: r1(+n.sugars_100g || 0), salt: r1(+n.salt_100g || 0) },
+    portion: { g: +p.serving_quantity || 100, label: 'порция' }, external: 'Open Food Facts' };
+}
+function saveExternalFood(found) {
+  const ex = found.barcode ? Object.values(D.foods).find((x) => sameCode(x.barcode, found.barcode)) : null;
+  if (ex) return customAsFood(ex);
+  const id = uid(); D.foods[id] = { kind: 'food', id, name: found.name, brand: found.brand, cat: 'custom', barcode: found.barcode, per: found.per, portion: found.portion, source: found.external, updated: Date.now() };
+  persist('food-' + id); invalidateFoods(); return customAsFood(D.foods[id]);
+}
+function foodRowHTML(f) {
+  return `<div class="frow" data-food="${f.id}" role="button" tabindex="0">
+    <div class="grow"><b>${esc(f.name)}</b><small class="muted">${f.brand && f.brand !== G ? esc(f.brand) + ' · ' : ''}${fmt(f.per.kcal)} ккал · Б ${fmt(f.per.p, 1)} · Ж ${fmt(f.per.f, 1)} · У ${fmt(f.per.c, 1)} <span class="dim">/100 г</span></small></div>
+    ${f.external ? '<span class="tag">интернет</span>' : f.recipe ? '<span class="tag">блюдо</span>' : f.custom ? '<span class="tag">моё</span>' : ''}
+    ${f.external ? '' : `<button class="icon-btn fav ${isFav(f.id) ? 'on' : ''}" data-fav="${f.id}" aria-label="Избранное">${ic('star', 18)}</button>`}
+  </div>`;
+}
+
+/* ---------- Количество продукта (добавление / редактирование) ---------- */
+function openAmount(food, ctx) {
+  const editing = ctx.item; let g = editing ? editing.g : (food.portion && food.portion.g) || 100;
+  let meal = ctx.meal; const mode = ctx.mode || 'diary';
+  const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
+  const s = Sheet.open({
+    title: editing ? 'Изменить запись' : food.name,
+    body: `${editing ? `<p class="lead">${esc(food.name)}</p>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? esc(food.brand) + ' · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
+      <div class="amount"><button class="icon-btn soft lg" data-k="m">${ic('minus')}</button>
+        <label class="amount-in"><input class="input big" data-k="g" inputmode="decimal" value="${g}" aria-label="Граммы"><span>г</span></label>
+        <button class="icon-btn soft lg" data-k="p">${ic('plus')}</button></div>
+      <div class="chips">${chips.map((c) => `<button class="chip" data-g="${c}">${c === (food.portion && food.portion.g) && !/\d/.test(food.portion.label) ? esc(food.portion.label) + ' · ' : ''}${c} г</button>`).join('')}
+        ${food.portion && food.portion.g ? `<button class="chip" data-g="${food.portion.g * 2}">×2 порции</button>` : ''}</div>
+      ${mode === 'diary' ? `<div class="seg mt12" data-k="meals">${MEALS.map((m) => `<button class="${m.id === meal ? 'on' : ''}" data-meal="${m.id}">${m.name}</button>`).join('')}</div>` : ''}
+      <div class="preview" data-k="prev"></div>`,
+    foot: `${editing ? `<button class="btn ghost danger-t" data-k="del">${ic('trash', 16)}Удалить</button>` : `<button class="icon-btn fav ${isFav(food.id) ? 'on' : ''}" data-k="fav" aria-label="В избранное">${ic('star')}</button>`}
+      <button class="btn primary grow" data-k="ok">${editing ? 'Сохранить' : (mode === 'diary' ? 'Добавить в дневник' : 'Добавить')}</button>`,
+  });
+  const inp = s.querySelector('[data-k=g]'); const prev = s.querySelector('[data-k=prev]');
+  const upd = () => {
+    const v = num(inp.value); const ok = Number.isFinite(v) && v > 0 && v <= 5000; inp.classList.toggle('invalid', !ok);
+    const n = scaleN(food.per, ok ? v : 0);
+    prev.innerHTML = `<div class="pv-k"><b>${fmt(n.kcal)}</b><span>ккал</span></div><div><b>${fmt(n.p, 1)}</b><span>белки</span></div><div><b>${fmt(n.f, 1)}</b><span>жиры</span></div><div><b>${fmt(n.c, 1)}</b><span>углеводы</span></div>`;
+    s.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', +c.dataset.g === v));
+  };
+  inp.addEventListener('input', upd);
+  s.querySelector('[data-k=m]').onclick = () => { inp.value = Math.max(1, r0((num(inp.value) || 0) - 10)); upd(); };
+  s.querySelector('[data-k=p]').onclick = () => { inp.value = r0((num(inp.value) || 0) + 10); upd(); };
+  s.querySelectorAll('.chip').forEach((c) => { c.onclick = () => { inp.value = c.dataset.g; upd(); }; });
+  const segs = s.querySelector('[data-k=meals]'); if (segs) segs.onclick = (e) => { const b = e.target.closest('[data-meal]'); if (!b) return; meal = b.dataset.meal; segs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
+  const fav = s.querySelector('[data-k=fav]'); if (fav) fav.onclick = () => { toggleFav(food.id); fav.classList.toggle('on', isFav(food.id)); toast(isFav(food.id) ? 'Добавлено в избранное' : 'Убрано из избранного'); };
+  const del = s.querySelector('[data-k=del]'); if (del) del.onclick = () => { ctx.onDelete && ctx.onDelete(); Sheet.close(); };
+  s.querySelector('[data-k=ok]').onclick = () => {
+    const v = num(inp.value); if (!(v > 0 && v <= 5000)) { markInvalid(inp, 'Укажите вес от 1 до 5000 г'); return; }
+    if (ctx.onDone) { Sheet.close(); if (ctx.fromPicker) Sheet.close(); ctx.onDone(food, r1(v), meal); return; }
+    if (editing) {
+      const day = ensureDay(ctx.date); const from = day.meals[ctx.meal]; const it = from.find((x) => x.id === editing.id);
+      if (it) { it.g = r1(v); if (meal !== ctx.meal) { day.meals[ctx.meal] = from.filter((x) => x.id !== it.id); day.meals[meal].push(it); } }
+      saveDay(ctx.date); Sheet.closeAll(); render(); toast('Сохранено');
+    } else {
+      addToDiary(ctx.date, meal, food, r1(v)); Sheet.closeAll(); render();
+      toast(`${food.name} — ${fmt(v)} г добавлено в «${MEALS.find((m) => m.id === meal).name}»`);
+    }
+  };
+  upd();
+}
+function addToDiary(date, meal, food, g) {
+  const day = ensureDay(date);
+  day.meals[meal].push({ id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) });
+  saveDay(date); if (food.id && !String(food.id).startsWith('q_')) pushRecent(food.id);
+}
+ACT.itemEdit = (el) => {
+  const date = App.diaryDate; const day = ensureDay(date); const it = day.meals[el.dataset.meal].find((x) => x.id === el.dataset.id); if (!it) return;
+  const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, portion: (findFood(it.ref) || {}).portion };
+  openAmount(food, { date, meal: el.dataset.meal, item: it, onDelete: () => { day.meals[el.dataset.meal] = day.meals[el.dataset.meal].filter((x) => x.id !== it.id); saveDay(date); render(); toast('Удалено'); } });
+};
+
+/* Быстрое добавление калорий */
+ACT.quickAdd = (el) => {
+  const date = el.dataset.date || App.diaryDate; const meal = el.dataset.meal || autoMeal();
+  Sheet.open({ title: 'Быстрое добавление', body: `<form class="form" data-sub="quickSave" data-date="${date}">
+    <label>Название<input class="input" name="name" placeholder="Например: кофе в кафе" maxlength="80"></label>
+    <div class="f2"><label>Ккал*<input class="input" name="kcal" inputmode="decimal"></label><label>Белки, г<input class="input" name="p" inputmode="decimal"></label>
+    <label>Жиры, г<input class="input" name="f" inputmode="decimal"></label><label>Углеводы, г<input class="input" name="c" inputmode="decimal"></label></div>
+    <label>Приём пищи<select class="input" name="meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
+    <button class="btn primary block">Добавить</button></form>` });
+};
+ACT.quickSave = validated((f) => {
+  const kcal = readNum(f, 'kcal', { min: 0, max: 5000, label: 'Ккал' });
+  const p = readNum(f, 'p', { min: 0, max: 500, required: false, label: 'Белки' }) || 0;
+  const fa = readNum(f, 'f', { min: 0, max: 500, required: false, label: 'Жиры' }) || 0;
+  const c = readNum(f, 'c', { min: 0, max: 1000, required: false, label: 'Углеводы' }) || 0;
+  const name = f.name.value.trim() || 'Быстрое добавление';
+  // Храним как «порция 100 г» = введённые значения
+  addToDiary(f.dataset.date, f.meal.value, { id: 'q_' + uid(), name, brand: '', per: { kcal, p, f: fa, c, fib: 0, sug: 0, salt: 0 } }, 100);
+  Sheet.close(); render(); toast('Добавлено');
+});
+
+/* Действия с приёмом пищи: копировать, сохранить как блюдо, очистить */
+ACT.mealMenu = (el) => {
+  const meal = el.dataset.meal; const mName = MEALS.find((m) => m.id === meal).name;
+  const s = Sheet.open({ title: mName, body: `<div class="menu">
+    <button data-k="copy">${ic('copy')}Копировать на другой день</button>
+    <button data-k="recipe">${ic('fork')}Сохранить как блюдо</button>
+    <button data-k="clear" class="danger-t">${ic('trash')}Очистить приём пищи</button></div>` });
+  s.querySelector('[data-k=copy]').onclick = () => { Sheet.close(); copyMealDialog(App.diaryDate, meal); };
+  s.querySelector('[data-k=recipe]').onclick = () => {
+    Sheet.close(); const items = getDay(App.diaryDate).meals[meal];
+    openRecipeEditor({ name: `${mName} ${fmtShort(App.diaryDate)}`, servings: 1, ingredients: items.map((it) => ({ ref: it.ref, name: it.name, g: it.g, per: clone(it.per) })) });
+  };
+  s.querySelector('[data-k=clear]').onclick = async () => {
+    Sheet.close(); if (!(await confirmDlg(`Удалить все продукты из «${mName}»?`))) return;
+    ensureDay(App.diaryDate).meals[meal] = []; saveDay(App.diaryDate); render(); toast('Очищено');
+  };
+};
+function copyMealDialog(fromDate, meal) {
+  const s = Sheet.open({ title: 'Копировать приём пищи', body: `<form class="form" data-k="f">
+    <label>На дату<input class="input" type="date" name="d" value="${addDays(fromDate, 1)}"></label>
+    <label>В приём пищи<select class="input" name="m">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
+    <button class="btn primary block">Копировать</button></form>` });
+  s.querySelector('[data-k=f]').onsubmit = (e) => {
+    e.preventDefault(); const to = e.target.d.value; if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) { toast('Выберите дату', 'err'); return; }
+    const src = getDay(fromDate).meals[meal]; const day = ensureDay(to);
+    src.forEach((it) => day.meals[e.target.m.value].push(Object.assign(clone(it), { id: uid() })));
+    saveDay(to); Sheet.close(); toast(`Скопировано: ${src.length} шт. → ${fmtDate(to)}`);
+  };
+}
+ACT.copyDay = () => {
+  const from = App.diaryDate; if (!dayHasFood(getDay(from))) { toast('В этом дне нет продуктов', 'warn'); return; }
+  const s = Sheet.open({ title: 'Копировать весь день', body: `<form class="form" data-k="f"><label>На дату<input class="input" type="date" name="d" value="${addDays(from, 1)}"></label><button class="btn primary block">Копировать</button></form>` });
+  s.querySelector('[data-k=f]').onsubmit = (e) => {
+    e.preventDefault(); const to = e.target.d.value; if (!to) return; const day = ensureDay(to); const src = getDay(from);
+    MEALS.forEach((m) => src.meals[m.id].forEach((it) => day.meals[m.id].push(Object.assign(clone(it), { id: uid() }))));
+    saveDay(to); Sheet.close(); toast('День скопирован на ' + fmtDate(to));
+  };
+};
+
+/* ============================================================
+   БАЗА ПРОДУКТОВ
+   ============================================================ */
+PAGES.foods = {
+  title: 'База продуктов', icon: 'db',
+  render() {
+    const cats = ['all', 'custom', 'recipe', ...Object.keys(FOOD_CATS).filter((k) => k !== 'custom' && k !== 'recipe')];
+    return `
+    <div class="pagehead"><div><h1>База продуктов</h1><p class="muted">${BASE_FOODS.length} базовых · ${Object.keys(D.foods).length} моих · ${Object.keys(D.recipes).length} блюд. Значения — на 100 г.</p></div>
+      <div class="row gap8"><button class="btn" data-act="go" data-p="scan">${ic('scan', 18)}Сканер</button><button class="btn primary" data-act="foodNew">${ic('plus', 18)}Новый продукт</button></div></div>
+    <div class="search big"><span>${ic('search', 20)}</span><input class="input" type="search" placeholder="Поиск по всей базе: название, производитель или штрихкод" value="${esc(App.foodQ)}" data-in="foodSearch" id="foodQ"></div>
+    <div class="chips scroll">${cats.map((c) => `<button class="chip ${App.foodCat === c ? 'on' : ''}" data-act="foodCat" data-c="${c}">${c === 'all' ? 'Все' : FOOD_CATS[c]}</button>`).join('')}</div>
+    <div class="card flush"><div id="foodList"></div></div>`;
+  },
+  mount() { drawFoodList(); },
+};
+function drawFoodList() {
+  const el = $('#foodList'); if (!el) return;
+  let list = App.foodQ ? searchFoods(App.foodQ, 500) : allFoods();
+  if (App.foodCat !== 'all') list = list.filter((f) => f.cat === App.foodCat || (App.foodCat === 'custom' && f.custom));
+  const shown = list.slice(0, App.foodLimit);
+  el.innerHTML = shown.length ? `<div class="ftable">${shown.map((f) => `
+    <div class="frow" data-act="foodOpen" data-id="${f.id}" role="button" tabindex="0">
+      <div class="grow"><b>${esc(f.name)}</b><small class="muted">${esc(f.brand && f.brand !== G ? f.brand : FOOD_CATS[f.cat] || '')}${f.barcode ? ' · ' + esc(f.barcode) : ''}</small></div>
+      <div class="fnums"><span><b>${fmt(f.per.kcal)}</b>ккал</span><span class="hide-xs"><b>${fmt(f.per.p, 1)}</b>Б</span><span class="hide-xs"><b>${fmt(f.per.f, 1)}</b>Ж</span><span class="hide-xs"><b>${fmt(f.per.c, 1)}</b>У</span></div>
+    </div>`).join('')}</div>${list.length > shown.length ? `<button class="btn block ghost" data-act="foodMore">Показать ещё (${list.length - shown.length})</button>` : ''}`
+    : emptyState('search', 'Ничего не найдено', 'Попробуйте другое название или создайте продукт.', `<button class="btn" data-act="foodNew">Создать продукт</button>`);
+}
+ACT.foodSearch = (el) => { App.foodQ = el.value; App.foodLimit = 80; drawFoodList(); };
+ACT.foodCat = (el) => { App.foodCat = el.dataset.c; App.foodLimit = 80; render(); };
+ACT.foodMore = () => { App.foodLimit += 120; drawFoodList(); };
+ACT.foodNew = () => openFoodForm({});
+ACT.foodOpen = (el) => openFoodDetail(el.dataset.id);
+ACT.go = (el) => go(el.dataset.p);
+
+function nutrTable(per, g = 100) {
+  const n = scaleN(per, g);
+  const rows = [['Калорийность', n.kcal, 'ккал', 0], ['Белки', n.p, 'г', 1], ['Жиры', n.f, 'г', 1], ['Углеводы', n.c, 'г', 1], ['— в т.ч. сахара', n.sug, 'г', 1], ['Клетчатка', n.fib, 'г', 1], ['Соль', n.salt, 'г', 2]];
+  return `<table class="ntable">${rows.map(([a, v, u, d]) => `<tr><td>${a}</td><td>${fmt(v, d)} ${u}</td></tr>`).join('')}</table>`;
+}
+function openFoodDetail(id) {
+  const f = findFood(id); if (!f) { toast('Продукт не найден', 'err'); return; }
+  const kcalP = f.per.p * 4, kcalF = f.per.f * 9, kcalC = f.per.c * 4; const sum = kcalP + kcalF + kcalC || 1;
+  const s = Sheet.open({
+    title: f.name, wide: true,
+    body: `<p class="muted">${esc(f.brand || '')}${f.barcode ? ' · штрихкод ' + esc(f.barcode) : ''} · ${esc(FOOD_CATS[f.cat] || '')}</p>
+      <div class="split mt12"><div><h4>На 100 г</h4>${nutrTable(f.per)}</div>
+      <div><h4>Порция: ${esc(f.portion ? f.portion.label : '')} (${f.portion ? fmt(f.portion.g) : 100} г)</h4>${nutrTable(f.per, f.portion ? f.portion.g : 100)}
+        <div class="ratio mt12"><i style="flex:${kcalP};background:var(--cp)"></i><i style="flex:${kcalF};background:var(--cf)"></i><i style="flex:${kcalC};background:var(--cc)"></i></div>
+        <p class="muted sm">Энергия: белки ${fmt(kcalP / sum * 100)}% · жиры ${fmt(kcalF / sum * 100)}% · углеводы ${fmt(kcalC / sum * 100)}%</p></div></div>
+      ${f.recipe ? `<p class="muted sm mt12">Блюдо считается из ингредиентов. Изменить состав можно в планировщике.</p>` : ''}`,
+    foot: `<button class="icon-btn fav ${isFav(f.id) ? 'on' : ''}" data-k="fav" aria-label="Избранное">${ic('star')}</button>
+      <button class="icon-btn" data-k="qr" aria-label="QR-код">${ic('qr')}</button>
+      ${f.custom ? `<button class="icon-btn" data-k="edit" aria-label="Редактировать">${ic('edit')}</button><button class="icon-btn danger-t" data-k="del" aria-label="Удалить">${ic('trash')}</button>` : ''}
+      ${f.recipe ? `<button class="icon-btn" data-k="redit" aria-label="Редактировать блюдо">${ic('edit')}</button>` : ''}
+      ${f.base ? `<button class="btn ghost sm" data-k="copy">Копия для правки</button>` : ''}
+      <button class="btn primary grow" data-k="add">В дневник</button>`,
+  });
+  const on = (k, fn) => { const b = s.querySelector(`[data-k=${k}]`); if (b) b.onclick = fn; };
+  on('fav', () => { toggleFav(f.id); s.querySelector('[data-k=fav]').classList.toggle('on', isFav(f.id)); });
+  on('qr', () => showQR(f.recipe ? 'recipe-' + f.rid : 'food-' + f.id.replace('_', '-'), f.name));
+  on('add', () => openAmount(f, { date: App.page === 'diary' ? App.diaryDate : todayISO(), meal: autoMeal() }));
+  on('edit', () => { Sheet.close(); openFoodForm({ food: D.foods[f.cid] }); });
+  on('redit', () => { Sheet.close(); openRecipeEditor(D.recipes[f.rid]); });
+  on('copy', () => { Sheet.close(); openFoodForm({ food: Object.assign({}, f, { id: null, brand: f.brand === G ? '' : f.brand, name: f.name + ' (моя версия)' }), isCopy: true }); });
+  on('del', async () => {
+    if (!(await confirmDlg(`Удалить продукт «${f.name}»? Записи в дневнике сохранятся.`))) return;
+    delete D.foods[f.cid]; persist('food-' + f.cid); invalidateFoods(); Sheet.closeAll(); render(); toast('Продукт удалён');
+  });
+}
+
+/* ---------- Создание и редактирование своего продукта ---------- */
+function openFoodForm({ food = null, name = '', barcode = '', afterSave = null, isCopy = false, note = '' }) {
+  const f = food || {}; const p = f.per || {};
+  const v = (x) => (x == null || x === '' ? '' : x);
+  Sheet.open({
+    title: food && !isCopy && food.id ? 'Редактировать продукт' : 'Новый продукт', wide: true,
+    body: `${note ? `<div class="banner info">${note}</div>` : ''}<form class="form" data-k="ff" novalidate>
+      <label>Название*<input class="input" name="name" value="${esc(f.name || name)}" maxlength="100" placeholder="Например: Творог 5%"></label>
+      <div class="f2"><label>Производитель<input class="input" name="brand" value="${esc(f.brand || '')}" maxlength="60"></label>
+        <label>Категория<select class="input" name="cat">${Object.entries(FOOD_CATS).filter(([k]) => k !== 'recipe').map(([k, n]) => `<option value="${k}" ${(f.cat || 'custom') === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+      <label>Штрихкод (EAN/UPC)<input class="input" name="barcode" inputmode="numeric" value="${esc(f.barcode || barcode)}" placeholder="необязательно"></label>
+      <h4 class="mt8">Пищевая ценность на 100 г</h4>
+      <div class="f4"><label>Ккал*<input class="input" name="kcal" inputmode="decimal" value="${v(p.kcal)}"></label><label>Белки*<input class="input" name="p" inputmode="decimal" value="${v(p.p)}"></label>
+        <label>Жиры*<input class="input" name="f" inputmode="decimal" value="${v(p.f)}"></label><label>Углеводы*<input class="input" name="c" inputmode="decimal" value="${v(p.c)}"></label>
+        <label>Клетчатка<input class="input" name="fib" inputmode="decimal" value="${v(p.fib)}"></label><label>Сахара<input class="input" name="sug" inputmode="decimal" value="${v(p.sug)}"></label>
+        <label>Соль<input class="input" name="salt" inputmode="decimal" value="${v(p.salt)}"></label><label>Порция, г<input class="input" name="pg" inputmode="decimal" value="${v(f.portion && f.portion.g) || 100}"></label></div>
+      <label>Название порции<input class="input" name="pl" value="${esc((f.portion && f.portion.label) || 'порция')}" maxlength="40"></label>
+      <p class="muted sm" data-k="chk"></p>
+      <button class="btn primary block">Сохранить продукт</button></form>`,
+    onMount: (s) => {
+      const form = s.querySelector('[data-k=ff]'); const chk = s.querySelector('[data-k=chk]');
+      const check = () => {
+        const k = num(form.kcal.value), pp = num(form.p.value), ff = num(form.f.value), cc = num(form.c.value);
+        if ([k, pp, ff, cc].every(Number.isFinite) && k > 0) {
+          const est = pp * 4 + ff * 9 + cc * 4; const dev = Math.abs(est - k) / k;
+          chk.textContent = dev > 0.2 ? `⚠ По БЖУ выходит ≈${fmt(est)} ккал — проверьте значения (возможно, опечатка).` : `Проверка: по БЖУ ≈${fmt(est)} ккал — сходится.`;
+        } else chk.textContent = '';
+      };
+      form.addEventListener('input', check); check();
+      form.onsubmit = validated((e) => {
+        e.preventDefault();
+        const nm = readStr(form, 'name', { label: 'Название', max: 100 });
+        const bc = form.barcode.value.replace(/\s/g, '');
+        if (bc && !/^\d{8}$|^\d{12,14}$/.test(bc)) { markInvalid(form.barcode, 'Штрихкод: 8, 12, 13 или 14 цифр'); return; }
+        const per = {
+          kcal: readNum(form, 'kcal', { min: 0, max: 950, label: 'Ккал' }), p: readNum(form, 'p', { min: 0, max: 100, label: 'Белки' }),
+          f: readNum(form, 'f', { min: 0, max: 100, label: 'Жиры' }), c: readNum(form, 'c', { min: 0, max: 100, label: 'Углеводы' }),
+          fib: readNum(form, 'fib', { min: 0, max: 100, required: false, label: 'Клетчатка' }) || 0, sug: readNum(form, 'sug', { min: 0, max: 100, required: false, label: 'Сахара' }) || 0,
+          salt: readNum(form, 'salt', { min: 0, max: 100, required: false, label: 'Соль' }) || 0,
+        };
+        if (per.p + per.f + per.c > 101) { markInvalid(form.p, 'Сумма Б+Ж+У не может быть больше 100 г на 100 г'); return; }
+        const pg = readNum(form, 'pg', { min: 1, max: 3000, label: 'Порция' });
+        if (bc) { const dup = Object.values(D.foods).find((x) => x.barcode === bc && x.id !== (food && !isCopy ? food.cid || food.id : null)); if (dup) { markInvalid(form.barcode, `Этот штрихкод уже у продукта «${dup.name}»`); return; } }
+        const id = (food && !isCopy && (food.cid || food.id)) || uid();
+        const rec = { kind: 'food', id, name: nm, brand: form.brand.value.trim(), cat: form.cat.value, barcode: bc, per, portion: { g: pg, label: form.pl.value.trim() || 'порция' }, updated: Date.now() };
+        D.foods[id] = rec; persist('food-' + id); invalidateFoods();
+        Sheet.close(); toast('Продукт сохранён'); if (afterSave) afterSave(rec); else render();
+      });
+    },
+  });
+}
+
+/* ---------- QR-коды своих продуктов и блюд ---------- */
+async function loadScript(src, globalName) {
+  if (globalName && window[globalName]) return window[globalName];
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Не удалось загрузить библиотеку')); document.head.appendChild(s); });
+  return globalName ? window[globalName] : true;
+}
+async function showQR(hash, title) {
+  const link = APP_URL + '#' + hash;
+  const s = Sheet.open({ title: 'QR-код', body: `<div class="qrbox"><div data-k="qr" class="qr">Создаю QR-код…</div><b>${esc(title)}</b><p class="muted sm">Наведите сканер FORMA или камеру телефона — откроется карточка.</p><code class="mono sm">${esc(link)}</code></div>`, foot: `<button class="btn grow" data-k="copy">${ic('copy', 16)}Копировать ссылку</button>` });
+  s.querySelector('[data-k=copy]').onclick = () => copyText(link, 'Ссылка скопирована');
+  try {
+    const qrcode = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', 'qrcode');
+    const q = qrcode(0, 'M'); q.addData(link); q.make();
+    s.querySelector('[data-k=qr]').innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  } catch (e) { s.querySelector('[data-k=qr]').textContent = 'Не удалось создать QR-код: нет доступа к библиотеке. Используйте ссылку ниже.'; }
+}

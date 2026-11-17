@@ -1,0 +1,23 @@
+{
+  "name": "FORMA — питание, вес и тренировки",
+  "short_name": "FORMA",
+  "description": "КБЖУ, дневник питания, шаги, бег, вес и тренировки. Работает без интернета.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0b0b0b",
+  "categories": ["health", "fitness", "food"],
+  "icons": [
+    { "src": "icons/icon-192.png?v=2", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Дневник", "url": "./#diary" },
+    { "name": "Шаги", "url": "./#steps" },
+    { "name": "Сканер", "url": "./#scan" }
+  ]
+}
