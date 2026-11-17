@@ -48,7 +48,7 @@ window.addEventListener('hashchange', () => route());
 function render() {
   if (!booted) return;
   const view = $('#view');
-  if (Store.needAuth) { document.body.classList.add('onb-mode'); view.innerHTML = authHTML(); return; }
+  if (Store.needAuth) { document.body.classList.add('onb-mode'); view.innerHTML = authHTML(); authMount(); return; }
   if (!D.profile) { document.body.classList.add('onb-mode'); view.innerHTML = onboardingHTML(); return; }
   document.body.classList.remove('onb-mode');
   Charts.reset();
