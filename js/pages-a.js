@@ -73,7 +73,7 @@ PAGES.dashboard = {
         <div class="card-h"><h3>${ic('steps', 18)}Шаги</h3><a href="#steps" class="link">${Pedo.on ? '● идёт подсчёт' : 'Подробнее'}</a></div>
         ${stepsOn ? stepsSummaryHTML(day, T, burned)
           : `<p class="muted">Сегодня шагов пока нет. Впишите их вручную, включите шагомер или перенесите из «Здоровья». Цель — ${fmt(T.steps)} в день.</p>`}
-        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${stepsOn ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="pedometer">${Pedo.on ? 'Остановить' : 'Шагомер'}</button><button class="btn sm ghost" data-act="stepsGoalEdit">Цель</button></div>
+        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${stepsOn ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="pedometer">${Pedo.on ? 'Остановить' : 'Шагомер'}</button><button class="btn sm ghost" data-act="stepsGoalEdit">Цель</button>${healthRefreshBtn('btn sm')}</div>
       </section>
 
       <section class="card fade">

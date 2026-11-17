@@ -236,6 +236,20 @@ ACT.stepsLinkCopy = () => copyText(location.origin + location.pathname + '#steps
    открывают личную ссылку → функция Supabase health-steps → документ health-ДАТА.
    ------------------------------------------------------------ */
 const healthFn = () => SUPA_URL + '/functions/v1/health-steps'; // SUPA_URL объявлен в account.js (грузится позже)
+function healthShortcutName() { return (settings().healthShortcut || 'FORMA').trim() || 'FORMA'; }
+/* Кнопка «Обновить шаги»: запускает команду iPhone и возвращает в FORMA (x-callback-url) */
+function healthRefreshBtn(cls = 'btn sm') {
+  if (!(Store.backend === 'supa' && Supa.user && D['health-token'])) return '';
+  return `<button class="${cls}" data-act="healthRun">${ic('heart', 16)}Обновить из «Здоровья»</button>`;
+}
+ACT.healthRun = () => {
+  const back = location.origin + location.pathname + '#' + (App.page || 'steps');
+  const url = `shortcuts://x-callback-url/run-shortcut?name=${encodeURIComponent(healthShortcutName())}&x-success=${encodeURIComponent(back)}&x-error=${encodeURIComponent(back)}`;
+  toast('Открываю «Команды»… вернётесь сюда автоматически', 'ok', 2500);
+  [1500, 4000, 8000].forEach((ms) => setTimeout(() => { if (typeof supaHealthRefresh === 'function') supaHealthRefresh(); }, ms));
+  location.href = url;
+};
+ACT.healthName = (el) => { const v = el.value.trim().slice(0, 60); setSetting('healthShortcut', v || 'FORMA'); toast(`Команда: «${v || 'FORMA'}»`); };
 function healthTokenLocal() { try { return localStorage.getItem(LS + 'healthToken:' + Store.uid) || ''; } catch (e) { return ''; } }
 function healthLink(t) { return `${healthFn()}?t=${t}&n=`; }
 function healthSyncHTML(ios) {
@@ -246,6 +260,8 @@ function healthSyncHTML(ios) {
   if (!signed) body = `<p class="muted">Шаги из «Здоровья» приходят через ваш аккаунт FORMA. Войдите в аккаунт (Профиль → «Войти»), и здесь появится настройка.</p>`;
   else if (doc && tok) body = `
     <div class="banner ${last ? 'ok' : 'info'}">${ic(last ? 'check' : 'info', 18)}<div>${lastTxt}<br><small class="muted">FORMA сама подтягивает шаги при открытии и каждые 5 минут.</small></div></div>
+    <div class="row gap8 mt12 wrap">${healthRefreshBtn('btn primary')}</div>
+    <label class="form mt8"><small class="muted">Название вашей команды в «Командах» (для кнопки выше)</small><input class="input" value="${esc(healthShortcutName())}" data-ch="healthName" maxlength="60"></label>
     <p class="mt12"><b>Ваша личная ссылка</b> <small class="muted">— никому её не отправляйте</small></p>
     <div class="row gap8"><input class="input mono sm grow" readonly value="${esc(healthLink(tok))}" data-k="hl"><button class="btn sm primary" data-act="healthCopy">${ic('copy', 16)}Копировать</button></div>
     <details class="mt12" ${last ? '' : 'open'}><summary><b>Как настроить на iPhone (один раз, ~3 минуты)</b></summary>
@@ -255,14 +271,14 @@ function healthSyncHTML(ios) {
       <li>«Добавить действие» → найдите <b>«Найти образцы здоровья»</b>. Нажмите «Тип» → <b>«Шаги»</b>. Добавьте фильтр <b>«Дата начала»</b> → <b>«Сегодня»</b>.</li>
       <li>Добавьте действие <b>«Вычислить статистику»</b> → выберите <b>«Сумма»</b>.</li>
       <li>Добавьте действие <b>«Получить содержимое URL»</b>. В поле адреса вставьте скопированную ссылку, поставьте курсор в самый конец (после <span class="mono">n=</span>) и над клавиатурой нажмите <b>«Статистика»</b>.</li>
-      <li>Назовите команду <b>«Шаги FORMA»</b> и нажмите ▶. Разрешите доступ к «Здоровью». Если всё верно, появится «FORMA: … шагов сохранено».</li>
-      <li>Вкладка <b>«Автоматизация»</b> → <b>«+»</b> → <b>«Время суток»</b> → например, 12:00, «Ежедневно» → <b>«Запускать сразу»</b> → «Далее» → выберите «Шаги FORMA». Сделайте так же на 18:00 и 23:50 — шаги будут обновляться несколько раз в день, а последний запуск сохранит итог дня.</li>
+      <li>Назовите команду <b>«FORMA»</b> и нажмите ▶. Разрешите доступ к «Здоровью». Если всё верно, появится «FORMA: … шагов сохранено».</li>
+      <li>Вкладка <b>«Автоматизация»</b> → <b>«+»</b> → <b>«Время суток»</b> → например, 12:00, «Ежедневно» → <b>«Запускать сразу»</b> → «Далее» → выберите «FORMA». Сделайте так же ещё на несколько времён (например, каждые 2–3 часа) и обязательно на 23:50 — последний запуск сохранит итог дня. А когда нужно прямо сейчас — нажмите «Обновить из „Здоровья“».</li>
     </ol></details>
     <button class="btn ghost sm mt12" data-act="healthCreate">Создать новую ссылку</button>
     <p class="muted sm">Новая ссылка отключает старую — тогда вставьте её в команду заново.</p>`;
   else body = `
     <p class="muted">iPhone считает шаги весь день сам — даже без интернета и когда FORMA закрыта. Подключите «Здоровье» один раз, и шаги будут сами появляться здесь несколько раз в день.</p>
-    ${doc ? '<div class="banner warn mt12">Ссылка уже создана на другом устройстве. Можно создать новую здесь — старая перестанет работать.</div>' : ''}
+    ${doc ? `<div class="banner warn mt12">Ссылка уже создана на другом устройстве. Можно создать новую здесь — старая перестанет работать.</div><div class="row gap8 mt12 wrap">${healthRefreshBtn()}</div>` : ''}
     <button class="btn primary mt12" data-act="healthCreate">${ic('heart', 18)}${doc ? 'Создать новую ссылку' : 'Подключить «Здоровье»'}</button>`;
   return `<section class="card fade">
       <div class="card-h"><div><h3>${ic('heart', 18)}Шаги из «Здоровья» автоматически</h3><small class="muted">${ios ? 'iPhone, через приложение «Команды»' : 'для iPhone (на Android — вставка вручную ниже)'}</small></div></div>
@@ -271,7 +287,7 @@ function healthSyncHTML(ios) {
 }
 ACT.healthCreate = async () => {
   if (!(Store.backend === 'supa' && Supa.user)) { toast('Сначала войдите в аккаунт', 'warn'); return; }
-  if (D['health-token'] && !(await confirmDlg('Создать новую ссылку? Старая перестанет работать — её нужно будет заменить в команде «Шаги FORMA».', 'Создать', false))) return;
+  if (D['health-token'] && !(await confirmDlg('Создать новую ссылку? Старая перестанет работать — её нужно будет заменить в команде «FORMA».', 'Создать', false))) return;
   try {
     const raw = new Uint8Array(24); crypto.getRandomValues(raw);
     const tok = btoa(String.fromCharCode(...raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -302,7 +318,7 @@ PAGES.steps = {
         <div class="card-h"><h3>${ic('steps', 18)}Сегодня</h3><button class="link-btn" data-act="stepsGoalEdit">цель ${fmt(T.steps)} ${ic('edit', 14)}</button></div>
         ${day.steps != null ? stepsSummaryHTML(day, T, burned) : '<div class="bignum"><span data-live="steps">0</span><small> шагов</small></div><p class="muted sm mt8">Пока нет данных за сегодня.</p>'}
         ${avg7 != null ? `<p class="muted sm">В среднем за 7 дней: ${fmt(avg7)} шагов</p>` : ''}
-        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${ic('edit', 16)}${day.steps != null ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="stepsGoalEdit">${ic('flame', 16)}Цель шагов</button></div>
+        <div class="row gap8 mt12 wrap"><button class="btn sm primary" data-act="stepsEdit">${ic('edit', 16)}${day.steps != null ? 'Изменить шаги' : 'Ввести шаги'}</button><button class="btn sm" data-act="stepsGoalEdit">${ic('flame', 16)}Цель шагов</button>${healthRefreshBtn()}</div>
       </section>
 
       <section class="card fade pd-card ${Pedo.on ? 'live' : ''}">
