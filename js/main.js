@@ -111,6 +111,7 @@ async function boot() {
   route();
   if (Store.cloudNote && Store.mode !== 'cloud') setTimeout(() => toast(Store.cloudNote, 'warn', 6000), 600);
   AI.init().then(() => { if (['ai', 'scan', 'diary'].includes(App.page) && !Sheet.stack.length) render(); });
+  StoreFoods.load().then(() => { if (['foods', 'scan'].includes(App.page) && !Sheet.stack.length) render(); });
 }
 document.addEventListener('DOMContentLoaded', boot);
 
@@ -122,7 +123,20 @@ const PWA = {
   init() {
     this.standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
     if (!IN_FRAME && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        // Проверяем обновление при каждом возврате в приложение и раз в 30 минут
+        const check = () => reg.update().catch(() => {});
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+        setInterval(check, 30 * 60 * 1000);
+      }).catch((e) => console.warn('sw', e));
+      // Новая версия установилась — перезагружаем страницу (данные уже сохранены)
+      let hadController = !!navigator.serviceWorker.controller; let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController) { hadController = true; return; }
+        if (reloading) return; reloading = true;
+        Store.flushAll(); toast('Вышла новая версия FORMA — обновляю…', 'ok', 2000);
+        setTimeout(() => location.reload(), Sheet.stack.length ? 4000 : 800);
+      });
     }
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); this.prompt = e; if (booted && App.page === 'dashboard') render(); });
     window.addEventListener('appinstalled', () => { this.prompt = null; this.standalone = true; toast('FORMA установлена на экран «Домой»'); render(); });

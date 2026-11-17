@@ -14,6 +14,11 @@ const BarcodeProviders = [
     async lookup(code) { const f = Object.values(D.foods).find((x) => sameCode(x.barcode, code)); return f ? customAsFood(f) : null; },
   },
   {
+    // Офлайн-база магазинных товаров (Open Food Facts: Казахстан и Россия) — работает без интернета
+    name: 'База магазинов', status: 'ok',
+    async lookup(code) { return StoreFoods.findCode(code); },
+  },
+  {
     // Open Food Facts — открытая мировая база штрихкодов. Работает там, где странице разрешены внешние запросы.
     // В окне claude.ai политика безопасности блокирует запросы к другим сайтам — тогда провайдер помечается недоступным.
     name: 'Open Food Facts', status: 'unknown',
@@ -118,7 +123,7 @@ const Scan = {
 PAGES.scan = {
   title: 'Сканер', icon: 'scan',
   render() {
-    const ctx = App.scanCtx; const off = BarcodeProviders[1].status;
+    const ctx = App.scanCtx; const off = BarcodeProviders[2].status;
     return `
     <div class="pagehead"><div><h1>Сканер штрихкодов</h1><p class="muted">${ctx ? `Добавление в «${MEALS.find((m) => m.id === ctx.meal).name}», ${fmtDate(ctx.date).toLowerCase()}` : 'Наведите камеру на штрихкод упаковки или QR-код FORMA'}</p></div></div>
     <section class="card scan-card">
@@ -134,7 +139,7 @@ PAGES.scan = {
     <section class="card subtle">
       <h4>Как это работает</h4>
       <ol class="steps-list"><li>Код распознаётся прямо на устройстве (EAN-13, EAN-8, UPC, Code 128, QR).</li>
-      <li>Поиск: ваши продукты${off === 'off' ? '' : ' → открытая база Open Food Facts'}.</li>
+      <li>Поиск: ваши продукты → база магазинов в приложении (${fmt(StoreFoods.list.length)} товаров, работает без интернета)${off === 'off' ? '' : ' → открытая база Open Food Facts в интернете'}.</li>
       <li>Нашёлся — укажите граммы и добавьте в дневник. Нет — создайте продукт вручную или сфотографируйте этикетку с КБЖУ, и AI заполнит форму для проверки. В следующий раз этот штрихкод найдётся сразу.</li></ol>
       ${off === 'off' ? '<p class="muted sm">Внешняя база штрихкодов недоступна из этого окна (браузер блокирует запросы к другим сайтам), поэтому поиск идёт по вашей базе продуктов.</p>' : ''}
     </section>`;

@@ -404,7 +404,7 @@ function saveExternalFood(found) {
 function foodRowHTML(f) {
   return `<div class="frow" data-food="${f.id}" role="button" tabindex="0">
     <div class="grow"><b>${esc(f.name)}</b><small class="muted">${f.brand && f.brand !== G ? esc(f.brand) + ' · ' : ''}${fmt(f.per.kcal)} ккал · Б ${fmt(f.per.p, 1)} · Ж ${fmt(f.per.f, 1)} · У ${fmt(f.per.c, 1)} <span class="dim">/100 г</span></small></div>
-    ${f.external ? '<span class="tag">интернет</span>' : f.recipe ? '<span class="tag">блюдо</span>' : f.custom ? '<span class="tag">моё</span>' : ''}
+    ${f.external ? '<span class="tag">интернет</span>' : f.store ? '<span class="tag">магазин</span>' : f.recipe ? '<span class="tag">блюдо</span>' : f.custom ? '<span class="tag">моё</span>' : ''}
     ${f.external ? '' : `<button class="icon-btn fav ${isFav(f.id) ? 'on' : ''}" data-fav="${f.id}" aria-label="Избранное">${ic('star', 18)}</button>`}
   </div>`;
 }
@@ -532,13 +532,14 @@ ACT.copyDay = () => {
 PAGES.foods = {
   title: 'База продуктов', icon: 'db',
   render() {
-    const cats = ['all', 'custom', 'recipe', ...Object.keys(FOOD_CATS).filter((k) => k !== 'custom' && k !== 'recipe')];
+    const cats = ['all', 'custom', 'recipe', ...Object.keys(FOOD_CATS).filter((k) => k !== 'custom' && k !== 'recipe' && (k !== 'store' || StoreFoods.list.length))];
     return `
-    <div class="pagehead"><div><h1>База продуктов</h1><p class="muted">${BASE_FOODS.length} базовых · ${Object.keys(D.foods).length} моих · ${Object.keys(D.recipes).length} блюд. Значения — на 100 г.</p></div>
+    <div class="pagehead"><div><h1>База продуктов</h1><p class="muted">${fmt(BASE_FOODS.length + StoreFoods.list.length)} продуктов${StoreFoods.list.length ? ` (из них ${fmt(StoreFoods.list.length)} магазинных товаров со штрихкодами)` : ''} · ${Object.keys(D.foods).length} моих · ${Object.keys(D.recipes).length} блюд. Значения — на 100 г.</p></div>
       <div class="row gap8"><button class="btn" data-act="go" data-p="scan">${ic('scan', 18)}Сканер</button><button class="btn primary" data-act="foodNew">${ic('plus', 18)}Новый продукт</button></div></div>
     <div class="search big"><span>${ic('search', 20)}</span><input class="input" type="search" placeholder="Поиск по всей базе: название, производитель или штрихкод" value="${esc(App.foodQ)}" data-in="foodSearch" id="foodQ"></div>
     <div class="chips scroll">${cats.map((c) => `<button class="chip ${App.foodCat === c ? 'on' : ''}" data-act="foodCat" data-c="${c}">${c === 'all' ? 'Все' : FOOD_CATS[c]}</button>`).join('')}</div>
-    <div class="card flush"><div id="foodList"></div></div>`;
+    <div class="card flush"><div id="foodList"></div></div>
+    ${StoreFoods.list.length ? '<p class="muted sm mt8">Магазинные товары — из открытой базы <a href="https://openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (лицензия ODbL). Данные вносят покупатели — сверяйте с упаковкой.</p>' : ''}`;
   },
   mount() { drawFoodList(); },
 };

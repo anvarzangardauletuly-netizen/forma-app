@@ -394,20 +394,41 @@ function recipeAsFood(r) {
 function customAsFood(f) { return Object.assign({}, f, { id: 'c_' + f.id, cid: f.id, custom: true, cat: f.cat || 'custom' }); }
 let _foodsCache = null;
 function invalidateFoods() { _foodsCache = null; }
+/* Магазинные товары (Open Food Facts: Казахстан и Россия, ~10 тыс. со штрихкодами).
+   Отдельный файл data/foods-off.json: грузится после запуска, кэшируется service worker'ом и работает офлайн. */
+const StoreFoods = {
+  list: [], byId: new Map(), byCode: new Map(), loaded: false, src: '',
+  async load() {
+    try {
+      const r = await withTimeout(fetch('data/foods-off.json'), 30000); if (!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json(); this.src = j.src || ''; this.version = j.v || '';
+      this.list = (j.items || []).map(([code, name, brand, kcal, p, f, c, fib, sug, salt, g, pop]) => ({
+        id: 'o' + code, name, brand: brand || '', cat: 'store', barcode: code, pop: pop || 0,
+        per: { kcal, p, f, c, fib, sug, salt }, portion: { g: g || 100, label: g && g !== 100 ? 'порция' : '100 г' }, base: true, store: true,
+      }));
+      this.list.forEach((x) => { this.byId.set(x.id, x); this.byCode.set(x.barcode.replace(/^0+/, ''), x); });
+      this.loaded = true; invalidateFoods();
+    } catch (e) { console.warn('store foods', e); }
+  },
+  findCode(code) { return this.byCode.get(String(code).replace(/^0+/, '')) || null; },
+};
 function allFoods() {
   if (_foodsCache) return _foodsCache;
   _foodsCache = [
     ...Object.values(D.foods).map(customAsFood),
     ...Object.values(D.recipes).map(recipeAsFood),
     ...BASE_FOODS,
+    ...StoreFoods.list,
   ];
   return _foodsCache;
 }
+const _baseById = new Map(BASE_FOODS.map((f) => [f.id, f]));
 function findFood(id) {
   if (!id) return null;
   if (id.startsWith('c_')) { const f = D.foods[id.slice(2)]; return f ? customAsFood(f) : null; }
   if (id.startsWith('r_')) { const r = D.recipes[id.slice(2)]; return r ? recipeAsFood(r) : null; }
-  return BASE_FOODS.find((f) => f.id === id) || null;
+  if (id.startsWith('o')) return StoreFoods.byId.get(id) || null;
+  return _baseById.get(id) || null;
 }
 /* Поиск понимает разные формы слов («жареные яйца» → «Яйцо жареное», «яичница») и разговорные синонимы */
 const FOOD_ALIASES = [
@@ -448,6 +469,7 @@ function searchFoods(q, limit = 60) {
     const nn = norm(f.name);
     let s = exact * 3; if (nn.startsWith(nq)) s += 10; if (words.some((w) => nn.startsWith(w) || nn.startsWith(stemRu(w)))) s += 5; if (f.custom || f.recipe) s += 3;
     if (words.every((w) => nn.includes(w) || hasStem(nn, w))) s += 4; // все слова — в самом названии
+    if (f.store) s -= 2 - Math.min(1.5, Math.log10(1 + f.pop) / 2); // общие продукты выше товаров, популярные товары выше редких
     if (D.meta.favorites.includes(f.id)) s += 2; s -= nn.length / 100;
     scored.push([s, f]);
   }
