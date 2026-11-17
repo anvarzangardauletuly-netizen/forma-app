@@ -60,7 +60,7 @@ small { font-size: 12.5px; } .sm { font-size: 13px; } .lead { font-size: 16px; m
 @media (max-width: 899px) {
   .side { display: none; }
   .main { margin-left: 0; }
-  .top { display: flex; position: sticky; top: 0; z-index: 15; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
+  .top { display: flex; position: sticky; top: 0; z-index: 15; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--bg); border-bottom: 1px solid var(--line); } /* сплошной фон: без размытого «мутного» текста под шапкой */
   .top-title { font-size: 15px; position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
   #view { padding: 16px 14px calc(104px + env(safe-area-inset-bottom)); }
   .bottom { display: flex; position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 30; justify-content: space-around; align-items: center;
