@@ -409,6 +409,32 @@ function findFood(id) {
   if (id.startsWith('r_')) { const r = D.recipes[id.slice(2)]; return r ? recipeAsFood(r) : null; }
   return BASE_FOODS.find((f) => f.id === id) || null;
 }
+/* Поиск понимает разные формы слов («жареные яйца» → «Яйцо жареное», «яичница») и разговорные синонимы */
+const FOOD_ALIASES = [
+  [/^(яйц|яичниц|омлет)|глазунь|болтунь/, 'яйца яйцо яичница жареные глазунья'],
+  [/картоф|пюре|фри|драник/, 'картошка картофель'],
+  [/макарон|спагетти|лапша|паста/, 'макароны паста'],
+  [/кур(ин|иц)|цыпл|наггетс/, 'курица куриное'],
+  [/говяд|телят|бефстроганов|гуляш|азу/, 'говядина мясо'],
+  [/свин|бекон|сало|карбонад/, 'свинина мясо'],
+  [/кока-кола|coca-cola/, 'кока кола cola coca'],
+  [/пепси|pepsi/, 'пепси pepsi'],
+  [/шаурм|донер|гирос/, 'шаурма шаверма донер'],
+  [/сосиск|сардельк/, 'сосиска сосиски'],
+  [/гречк|гречн/, 'гречка гречневая'],
+  [/творог|творож/, 'творог творожный'],
+  [/плов/, 'плов'], [/бургер|чизбургер|гамбургер|воппер|мак/, 'бургер'],
+];
+function stemRu(w) { return w.length >= 4 ? w.slice(0, Math.max(3, w.length - 3)) : w; }
+/* основа слова должна стоять в начале какого-то слова: «сник(ерс)» не должно находить «бру-сник-а» */
+const hasStem = (hay, w) => (' ' + hay).includes(' ' + stemRu(w));
+function foodHay(f) {
+  if (f._hay) return f._hay;
+  const name = norm(f.name); let hay = name + ' ' + norm(f.brand || '') + ' ' + norm(FOOD_CATS[f.cat] || '');
+  FOOD_ALIASES.forEach(([re, extra]) => { if (re.test(name)) hay += ' ' + extra; });
+  try { Object.defineProperty(f, '_hay', { value: hay, enumerable: false, configurable: true }); } catch (e) { /* замороженный объект */ }
+  return hay;
+}
 function searchFoods(q, limit = 60) {
   const nq = norm(q); const list = allFoods();
   if (!nq) return list.slice(0, limit);
@@ -416,10 +442,12 @@ function searchFoods(q, limit = 60) {
   const words = nq.split(' ');
   const scored = [];
   for (const f of list) {
-    const hay = norm(f.name + ' ' + (f.brand || '') + ' ' + (FOOD_CATS[f.cat] || ''));
-    if (!words.every((w) => hay.includes(w))) continue;
+    const hay = foodHay(f); let exact = 0; let ok = true;
+    for (const w of words) { if (hay.includes(w)) exact++; else if (!hasStem(hay, w)) { ok = false; break; } }
+    if (!ok) continue;
     const nn = norm(f.name);
-    let s = 0; if (nn.startsWith(nq)) s += 10; if (nn.startsWith(words[0])) s += 5; if (f.custom || f.recipe) s += 3;
+    let s = exact * 3; if (nn.startsWith(nq)) s += 10; if (words.some((w) => nn.startsWith(w) || nn.startsWith(stemRu(w)))) s += 5; if (f.custom || f.recipe) s += 3;
+    if (words.every((w) => nn.includes(w) || hasStem(nn, w))) s += 4; // все слова — в самом названии
     if (D.meta.favorites.includes(f.id)) s += 2; s -= nn.length / 100;
     scored.push([s, f]);
   }
