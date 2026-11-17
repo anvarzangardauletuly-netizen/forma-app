@@ -513,3 +513,8 @@ body.onb-mode #view { padding-top: calc(16px + env(safe-area-inset-top)); }
 
 [hidden] { display: none !important; }
 p.center, .muted.center { text-align: center; }
+.oil-box { background: var(--card2); border-radius: 14px; padding: 10px 12px; }
+.oil-box .chips { margin-top: 8px; } .oil-box .oil-type { width: auto; height: 34px; padding: 0 10px; font-size: 13px; }
+.oil-custom { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--muted); } .oil-custom .input { width: 90px; }
+.oil-box .row > b { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.oil-box select.oil-type { font-size: 13px !important; height: 32px !important; width: auto !important; min-width: 0; padding: 0 8px; border-radius: 10px; }

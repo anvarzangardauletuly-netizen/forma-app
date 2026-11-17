@@ -328,7 +328,15 @@ function normDay(v, date) { const d = Object.assign(emptyDay(date), v || {}); d.
 function getDay(date) { return D.days[date] || emptyDay(date); }
 function ensureDay(date) { if (!D.days[date]) D.days[date] = emptyDay(date); return D.days[date]; }
 function saveDay(date) { const d = D.days[date]; if (!d) return; persist('day-' + date); }
-function itemN(it) { return scaleN(it.per, it.g); }
+/* Масло, на котором готовили (добавляется к записи дневника: it.oil = { t: 'veg' | 'butter', g }) */
+const OILS = {
+  veg: { name: 'растительное масло', per: { kcal: 899, p: 0, f: 99.9, c: 0, fib: 0, sug: 0, salt: 0 } },
+  butter: { name: 'сливочное масло', per: { kcal: 748, p: 0.5, f: 82.5, c: 0.8, fib: 0, sug: 0.8, salt: 0 } },
+  ghee: { name: 'топлёное масло (гхи)', per: { kcal: 892, p: 0.2, f: 99, c: 0, fib: 0, sug: 0, salt: 0 } },
+  fat: { name: 'жир / сало', per: { kcal: 897, p: 0, f: 99.7, c: 0, fib: 0, sug: 0, salt: 0 } },
+};
+function oilN(oil) { return oil && oil.g > 0 && OILS[oil.t] ? scaleN(OILS[oil.t].per, oil.g) : zeroN(); }
+function itemN(it) { return addN(scaleN(it.per, it.g), oilN(it.oil)); }
 function mealTotals(day, meal) { return (day.meals[meal] || []).reduce((acc, it) => addN(acc, itemN(it)), zeroN()); }
 function dayTotals(day) { const t = zeroN(); MEALS.forEach((m) => addN(t, mealTotals(day, m.id))); return t; }
 function dayHasFood(day) { return MEALS.some((m) => (day.meals[m.id] || []).length); }

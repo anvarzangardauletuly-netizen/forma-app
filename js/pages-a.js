@@ -269,7 +269,7 @@ function mealCardHTML(day, m, date) {
       <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
     ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
       <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
-        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} г${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} г${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
         <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
   </section>`;
 }
@@ -410,6 +410,7 @@ function foodRowHTML(f) {
 }
 
 /* ---------- Количество продукта (добавление / редактирование) ---------- */
+const OIL_STEPS = [[0, 'нет'], [5, '1 ч. л.'], [10, '1 ст. л.'], [20, '2 ст. л.']];
 /* Единица для счёта «штуками/порциями»: из подписи порции («1 яйцо», «2 яйца» → 1 шт = половина, «стакан», «тарелка»…) */
 function foodUnit(food) {
   const pt = food && food.portion; if (!pt || !(pt.g > 0)) return null;
@@ -429,6 +430,9 @@ function openAmount(food, ctx) {
   let useUnit = !!unit && (editing ? !!editing.unit : true);
   let g = editing ? editing.g : (unit ? unit.g : 100);
   let cnt = editing && editing.unit ? editing.unit.n : 1;
+  const oilOk = mode === 'diary' && !['drink', 'sweet', 'oil', 'sport'].includes(food.cat);
+  const oil = editing && editing.oil ? { ...editing.oil } : { t: 'veg', g: 0 };
+  const friedNote = /жарен|фри|глазунь|яичниц|в кляре|панировк|котлет|чебурек|беляш|пончик|драник|оладь|блин/i.test(food.name || '');
   const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
   const s = Sheet.open({
     title: editing ? 'Изменить запись' : food.name,
@@ -447,18 +451,36 @@ function openAmount(food, ctx) {
           <button class="icon-btn soft lg" data-k="p">${ic('plus')}</button></div>
         <div class="chips">${chips.map((c) => `<button class="chip" data-g="${c}">${c === (food.portion && food.portion.g) && !/\d/.test(food.portion.label) ? esc(food.portion.label) + ' · ' : ''}${c} г</button>`).join('')}</div>
       </div>
+      ${oilOk ? `<div class="oil-box mt12">
+        <div class="row between"><b class="sm">${ic('drop', 16)} Готовили на масле?</b><select class="input sm oil-type" data-k="ot">${[['veg', 'растительное'], ['butter', 'сливочное'], ['ghee', 'топлёное'], ['fat', 'жир / сало']].map(([k, n]) => `<option value="${k}" ${oil.t === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="chips" data-k="oil">${OIL_STEPS.map(([g, l]) => `<button class="chip ${oil.g === g ? 'on' : ''}" data-og="${g}">${l}</button>`).join('')}<button class="chip ${oil.g && !OIL_STEPS.some(([g]) => g === oil.g) ? 'on' : ''}" data-og="custom">своё</button></div>
+        <label class="oil-custom" ${oil.g && !OIL_STEPS.some(([g]) => g === oil.g) ? '' : 'hidden'}>Масла, г<input class="input" data-k="og" inputmode="decimal" value="${oil.g || ''}"></label>
+        ${friedNote ? '<p class="muted sm">У этого продукта масло уже учтено в калорийности. Добавляйте, только если масла было заметно больше обычного.</p>' : '<p class="muted sm">1 ч. л. ≈ 5 г ≈ 45 ккал · 1 ст. л. ≈ 10 г ≈ 90 ккал</p>'}
+      </div>` : ''}
       ${mode === 'diary' ? `<div class="seg mt12" data-k="meals">${MEALS.map((m) => `<button class="${m.id === meal ? 'on' : ''}" data-meal="${m.id}">${m.name}</button>`).join('')}</div>` : ''}
       <div class="preview" data-k="prev"></div>`,
     foot: `${editing ? `<button class="btn ghost danger-t" data-k="del">${ic('trash', 16)}Удалить</button>` : `<button class="icon-btn fav ${isFav(food.id) ? 'on' : ''}" data-k="fav" aria-label="В избранное">${ic('star')}</button>`}
       <button class="btn primary grow" data-k="ok">${editing ? 'Сохранить' : (mode === 'diary' ? 'Добавить в дневник' : 'Добавить')}</button>`,
   });
   const inp = s.querySelector('[data-k=g]'); const nIn = s.querySelector('[data-k=n]'); const prev = s.querySelector('[data-k=prev]');
+  const oilBox = s.querySelector('.oil-box');
+  if (oilBox) {
+    const ogIn = oilBox.querySelector('[data-k=og]'); const custom = oilBox.querySelector('.oil-custom');
+    oilBox.querySelector('[data-k=oil]').onclick = (e) => {
+      const b = e.target.closest('[data-og]'); if (!b) return;
+      oilBox.querySelectorAll('[data-og]').forEach((c) => c.classList.toggle('on', c === b));
+      if (b.dataset.og === 'custom') { custom.hidden = false; oil.g = num(ogIn.value) || 0; ogIn.focus(); } else { custom.hidden = true; oil.g = +b.dataset.og; }
+      upd();
+    };
+    ogIn.addEventListener('input', () => { oil.g = num(ogIn.value) || 0; upd(); });
+    oilBox.querySelector('[data-k=ot]').onchange = (e) => { oil.t = e.target.value; upd(); };
+  }
   const grams = () => (useUnit ? (num(nIn.value) || 0) * unit.g : num(inp.value));
   const upd = () => {
     const v = grams(); const ok = Number.isFinite(v) && v > 0 && v <= 5000;
     (useUnit ? nIn : inp).classList.toggle('invalid', !ok);
     if (useUnit) { s.querySelector('[data-k=ug]').textContent = ok ? `всего ${fmt(v)} г` : 'укажите количество'; }
-    const n = scaleN(food.per, ok ? v : 0);
+    const n = addN(scaleN(food.per, ok ? v : 0), oilN(oil));
     prev.innerHTML = `<div class="pv-k"><b>${fmt(n.kcal)}</b><span>ккал</span></div><div><b>${fmt(n.p, 1)}</b><span>белки</span></div><div><b>${fmt(n.f, 1)}</b><span>жиры</span></div><div><b>${fmt(n.c, 1)}</b><span>углеводы</span></div>`;
     s.querySelectorAll('[data-g]').forEach((c) => c.classList.toggle('on', +c.dataset.g === num(inp.value)));
     s.querySelectorAll('[data-n]').forEach((c) => c.classList.toggle('on', +c.dataset.n === num(nIn.value)));
@@ -484,28 +506,30 @@ function openAmount(food, ctx) {
   s.querySelector('[data-k=ok]').onclick = () => {
     const v = grams(); if (!(v > 0 && v <= 5000)) { markInvalid(useUnit ? nIn : inp, useUnit ? 'Укажите количество (всего до 5000 г)' : 'Укажите вес от 1 до 5000 г'); return; }
     const u = useUnit ? { n: num(nIn.value), name: unit.name, g: unit.g } : null;
+    if (!(oil.g >= 0 && oil.g <= 200)) { toast('Масла — от 0 до 200 г', 'err'); return; }
+    const o = oil.g > 0 ? { t: oil.t, g: r1(oil.g) } : null;
     if (ctx.onDone) { Sheet.close(); if (ctx.fromPicker) Sheet.close(); ctx.onDone(food, r1(v), meal, u); return; }
     if (editing) {
       const day = ensureDay(ctx.date); const from = day.meals[ctx.meal]; const it = from.find((x) => x.id === editing.id);
-      if (it) { it.g = r1(v); if (u) it.unit = u; else delete it.unit; if (meal !== ctx.meal) { day.meals[ctx.meal] = from.filter((x) => x.id !== it.id); day.meals[meal].push(it); } }
+      if (it) { it.g = r1(v); if (u) it.unit = u; else delete it.unit; if (o) it.oil = o; else delete it.oil; if (meal !== ctx.meal) { day.meals[ctx.meal] = from.filter((x) => x.id !== it.id); day.meals[meal].push(it); } }
       saveDay(ctx.date); Sheet.closeAll(); render(); toast('Сохранено');
     } else {
-      addToDiary(ctx.date, meal, food, r1(v), u); Sheet.closeAll(); render();
-      toast(`${food.name} — ${u ? unitText(u, u.n) + ' (' + fmt(v) + ' г)' : fmt(v) + ' г'} добавлено в «${MEALS.find((m) => m.id === meal).name}»`);
+      addToDiary(ctx.date, meal, food, r1(v), u, o); Sheet.closeAll(); render();
+      toast(`${food.name} — ${u ? unitText(u, u.n) + ' (' + fmt(v) + ' г)' : fmt(v) + ' г'}${o ? ` + масло ${fmt(o.g)} г` : ''} добавлено в «${MEALS.find((m) => m.id === meal).name}»`);
     }
   };
   upd();
   setTimeout(() => { const f = useUnit ? nIn : inp; if (window.innerWidth > 700) f.select(); }, 150);
 }
-function addToDiary(date, meal, food, g, unit = null) {
+function addToDiary(date, meal, food, g, unit = null, oil = null) {
   const day = ensureDay(date);
-  const it = { id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) }; if (unit) it.unit = unit;
+  const it = { id: uid(), ref: food.id, name: food.name, brand: food.brand || '', g, per: clone(food.per) }; if (unit) it.unit = unit; if (oil) it.oil = oil;
   day.meals[meal].push(it);
   saveDay(date); if (food.id && !/^(q_|ai_)/.test(String(food.id))) pushRecent(food.id);
 }
 ACT.itemEdit = (el) => {
   const date = App.diaryDate; const day = ensureDay(date); const it = day.meals[el.dataset.meal].find((x) => x.id === el.dataset.id); if (!it) return;
-  const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, portion: (findFood(it.ref) || {}).portion || (it.unit ? { g: it.unit.g, label: '1 ' + it.unit.name } : null) };
+  const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, cat: (findFood(it.ref) || {}).cat, portion: (findFood(it.ref) || {}).portion || (it.unit ? { g: it.unit.g, label: '1 ' + it.unit.name } : null) };
   openAmount(food, { date, meal: el.dataset.meal, item: it, onDelete: () => { day.meals[el.dataset.meal] = day.meals[el.dataset.meal].filter((x) => x.id !== it.id); saveDay(date); render(); toast('Удалено'); } });
 };
 
@@ -540,7 +564,7 @@ ACT.mealMenu = (el) => {
   s.querySelector('[data-k=copy]').onclick = () => { Sheet.close(); copyMealDialog(App.diaryDate, meal); };
   s.querySelector('[data-k=recipe]').onclick = () => {
     Sheet.close(); const items = getDay(App.diaryDate).meals[meal];
-    openRecipeEditor({ name: `${mName} ${fmtShort(App.diaryDate)}`, servings: 1, ingredients: items.map((it) => ({ ref: it.ref, name: it.name, g: it.g, per: clone(it.per) })) });
+    openRecipeEditor({ name: `${mName} ${fmtShort(App.diaryDate)}`, servings: 1, ingredients: items.flatMap((it) => [{ ref: it.ref, name: it.name, g: it.g, per: clone(it.per) }, ...(it.oil && it.oil.g > 0 ? [{ ref: null, name: OILS[it.oil.t].name[0].toUpperCase() + OILS[it.oil.t].name.slice(1), g: it.oil.g, per: clone(OILS[it.oil.t].per) }] : [])]) });
   };
   s.querySelector('[data-k=clear]').onclick = async () => {
     Sheet.close(); if (!(await confirmDlg(`Удалить все продукты из «${mName}»?`))) return;
