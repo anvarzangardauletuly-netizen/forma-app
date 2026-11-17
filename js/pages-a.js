@@ -432,7 +432,7 @@ function openAmount(food, ctx) {
   let cnt = editing && editing.unit ? editing.unit.n : 1;
   const oilOk = mode === 'diary' && !['drink', 'sweet', 'oil', 'sport'].includes(food.cat);
   const oil = editing && editing.oil ? { ...editing.oil } : { t: 'veg', g: 0 };
-  const friedNote = /жарен|фри|глазунь|яичниц|в кляре|панировк|котлет|чебурек|беляш|пончик|драник|оладь|блин/i.test(food.name || '');
+  const friedNote = /жарен|фри|глазунь|яичниц|в кляре|панировк|котлет|чебурек|беляш|пончик|драник|оладь|блин/i.test(food.name || '') && !/без масла/i.test(food.name || '');
   const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
   const s = Sheet.open({
     title: editing ? 'Изменить запись' : food.name,
