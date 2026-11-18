@@ -254,7 +254,7 @@ PAGES.diary = {
       <textarea class="input" rows="2" data-in="dayNote" placeholder="Самочувствие, сон, особенности дня…" maxlength="500">${esc(day.note || '')}</textarea>
       <div class="row gap8 wrap mt12">
         <button class="btn sm" data-act="copyDay">${ic('copy', 16)}Копировать день</button>
-        <button class="btn sm" data-act="quickAdd" data-date="${date}" data-meal="${autoMeal()}">${ic('flame', 16)}Быстрое добавление ккал</button>
+        <button class="btn sm" data-act="quickAdd" data-date="${date}" data-meal="${autoMeal()}">${ic('edit', 16)}Свои ккал и БЖУ</button>
         <button class="btn sm" data-act="aiPhoto" data-date="${date}" data-meal="${autoMeal()}">${ic('camera', 16)}Еда по фото</button>
         <button class="btn sm" data-act="aiText" data-date="${date}" data-meal="${autoMeal()}">${ic('spark', 16)}Описать словами</button>
       </div>
@@ -269,7 +269,7 @@ function mealCardHTML(day, m, date) {
       <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
     ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
       <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
-        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${fmt(it.g)} ${isWaterItem(it) || /напит|сок|чай|кофе|компот|кефир|молоко|айран|кола|лимонад|вода/i.test(it.name) ? 'мл' : 'г'}${isWaterItem(it) ? ' · в воду' : ''}${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${it.quick && it.quick.noG ? 'своя запись' : fmt(it.g)} ${it.quick && it.quick.noG ? '' : isWaterItem(it) || /напит|сок|чай|кофе|компот|кефир|молоко|айран|кола|лимонад|вода/i.test(it.name) ? 'мл' : 'г'}${isWaterItem(it) ? ' · в воду' : ''}${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
         <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
   </section>`;
 }
@@ -317,7 +317,7 @@ function openFoodPicker(ctx) {
         <button class="qbtn" data-k="scan">${ic('scan', 20)}<span>Штрихкод</span></button>
         <button class="qbtn" data-k="photo">${ic('camera', 20)}<span>Фото еды</span></button>
         <button class="qbtn" data-k="aitext">${ic('spark', 20)}<span>Описать словами</span></button>
-        <button class="qbtn" data-k="quick">${ic('flame', 20)}<span>Быстро ккал</span></button>
+        <button class="qbtn" data-k="quick">${ic('edit', 20)}<span>Свои ккал и БЖУ</span></button>
         <button class="qbtn" data-k="create">${ic('plus', 20)}<span>Новый продукт</span></button></div>` : ''}
       <div class="tabs" data-k="tabs">${[['search', 'Все'], ['recent', 'Недавние'], ['fav', 'Избранное'], ['mine', 'Мои'], ['dishes', 'Блюда']].map(([k, n]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
       <div class="results" data-k="res"></div>`,
@@ -348,7 +348,7 @@ function openFoodPicker(ctx) {
   const on = (k, fn) => { const b = s.querySelector(`[data-k=${k}]`); if (b) b.onclick = fn; };
   on('scan', () => { Sheet.closeAll(); App.scanCtx = { date: ctx.date, meal: ctx.meal }; go('scan'); });
   on('photo', () => { Sheet.close(); ACT.aiPhoto({ dataset: { date: ctx.date, meal: ctx.meal } }); });
-  on('quick', () => { Sheet.close(); ACT.quickAdd({ dataset: { date: ctx.date, meal: ctx.meal } }); });
+  on('quick', () => { Sheet.close(); ACT.quickAdd({ dataset: { date: ctx.date, meal: ctx.meal, q } }); });
   on('aitext', () => { Sheet.close(); ACT.aiText({ dataset: { date: ctx.date, meal: ctx.meal, q } }); });
   on('create', () => openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }));
   draw(); setTimeout(() => { if (window.innerWidth > 700) inp.focus(); }, 120);
@@ -436,7 +436,7 @@ function openAmount(food, ctx) {
   const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
   const s = Sheet.open({
     title: editing ? 'Изменить запись' : food.name,
-    body: `${editing ? `<p class="lead">${esc(food.name)}</p>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? esc(food.brand) + ' · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
+    body: `${editing ? `<p class="lead">${esc(food.name)}</p><button class="link-btn" data-k="manual">${ic('edit', 14)} Вписать свои ккал и БЖУ</button>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? esc(food.brand) + ' · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
       ${unit ? `<div class="seg mt8" data-k="modes"><button class="${useUnit ? 'on' : ''}" data-m="u">Штуки / порции</button><button class="${useUnit ? '' : 'on'}" data-m="g">Граммы</button></div>` : ''}
       <div data-k="uBox" ${useUnit ? '' : 'hidden'}>
         <div class="amount"><button class="icon-btn soft lg" data-k="um">${ic('minus')}</button>
@@ -503,6 +503,7 @@ function openAmount(food, ctx) {
   const segs = s.querySelector('[data-k=meals]'); if (segs) segs.onclick = (e) => { const b = e.target.closest('[data-meal]'); if (!b) return; meal = b.dataset.meal; segs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
   const fav = s.querySelector('[data-k=fav]'); if (fav) fav.onclick = () => { toggleFav(food.id); fav.classList.toggle('on', isFav(food.id)); toast(isFav(food.id) ? 'Добавлено в избранное' : 'Убрано из избранного'); };
   const del = s.querySelector('[data-k=del]'); if (del) del.onclick = () => { ctx.onDelete && ctx.onDelete(); Sheet.close(); };
+  const man = s.querySelector('[data-k=manual]'); if (man) man.onclick = () => { Sheet.close(); openManual({ date: ctx.date, meal: ctx.meal, item: editing }); };
   s.querySelector('[data-k=ok]').onclick = () => {
     const v = grams(); if (!(v > 0 && v <= 5000)) { markInvalid(useUnit ? nIn : inp, useUnit ? 'Укажите количество (всего до 5000 г)' : 'Укажите вес от 1 до 5000 г'); return; }
     const u = useUnit ? { n: num(nIn.value), name: unit.name, g: unit.g } : null;
@@ -529,30 +530,80 @@ function addToDiary(date, meal, food, g, unit = null, oil = null) {
 }
 ACT.itemEdit = (el) => {
   const date = App.diaryDate; const day = ensureDay(date); const it = day.meals[el.dataset.meal].find((x) => x.id === el.dataset.id); if (!it) return;
+  if (it.quick || String(it.ref || '').startsWith('q_')) { openManual({ date, meal: el.dataset.meal, item: it }); return; }
   const food = { id: it.ref, name: it.name, brand: it.brand, per: it.per, cat: (findFood(it.ref) || {}).cat, portion: (findFood(it.ref) || {}).portion || (it.unit ? { g: it.unit.g, label: '1 ' + it.unit.name } : null) };
   openAmount(food, { date, meal: el.dataset.meal, item: it, onDelete: () => { day.meals[el.dataset.meal] = day.meals[el.dataset.meal].filter((x) => x.id !== it.id); saveDay(date); render(); toast('Удалено'); } });
 };
 
-/* Быстрое добавление калорий */
-ACT.quickAdd = (el) => {
-  const date = el.dataset.date || App.diaryDate; const meal = el.dataset.meal || autoMeal();
-  Sheet.open({ title: 'Быстрое добавление', body: `<form class="form" data-sub="quickSave" data-date="${date}">
-    <label>Название<input class="input" name="name" placeholder="Например: кофе в кафе" maxlength="80"></label>
-    <div class="f2"><label>Ккал*<input class="input" name="kcal" inputmode="decimal"></label><label>Белки, г<input class="input" name="p" inputmode="decimal"></label>
-    <label>Жиры, г<input class="input" name="f" inputmode="decimal"></label><label>Углеводы, г<input class="input" name="c" inputmode="decimal"></label></div>
-    <label>Приём пищи<select class="input" name="meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
-    <button class="btn primary block">Добавить</button></form>` });
-};
-ACT.quickSave = validated((f) => {
-  const kcal = readNum(f, 'kcal', { min: 0, max: 5000, label: 'Ккал' });
-  const p = readNum(f, 'p', { min: 0, max: 500, required: false, label: 'Белки' }) || 0;
-  const fa = readNum(f, 'f', { min: 0, max: 500, required: false, label: 'Жиры' }) || 0;
-  const c = readNum(f, 'c', { min: 0, max: 1000, required: false, label: 'Углеводы' }) || 0;
-  const name = f.name.value.trim() || 'Быстрое добавление';
-  // Храним как «порция 100 г» = введённые значения
-  addToDiary(f.dataset.date, f.meal.value, { id: 'q_' + uid(), name, brand: '', per: { kcal, p, f: fa, c, fib: 0, sug: 0, salt: 0 } }, 100);
-  Sheet.close(); render(); toast('Добавлено');
-});
+/* Свои калории и КБЖУ: вписать вручную (на всю порцию или на 100 г), по желанию сохранить в «Мои продукты».
+   Также правка цифр у уже записанной еды (ctx.item). */
+ACT.quickAdd = (el) => openManual({ date: el.dataset.date || App.diaryDate, meal: el.dataset.meal || autoMeal(), q: el.dataset.q || '' });
+function openManual({ date, meal, item = null, q = '' }) {
+  const tot = item ? itemN(item) : null; const noG = item && item.quick && item.quick.noG;
+  const v = (x) => (x == null ? '' : r1(x));
+  const s = Sheet.open({ title: item ? 'Изменить ккал и БЖУ' : 'Свои калории и БЖУ', body: `<form class="form" data-k="f" novalidate>
+    <label>Название<input class="input" name="name" value="${esc(item ? item.name : q)}" placeholder="Например: обед в кафе, протеиновый батончик" maxlength="80"></label>
+    <div class="seg" data-k="mode"><button type="button" class="on" data-m="total">На всю порцию</button><button type="button" data-m="per">На 100 г</button></div>
+    <label>Вес, г<input class="input" name="g" inputmode="decimal" value="${item && !noG ? v(item.g) : ''}" placeholder="необязательно, например 250"></label>
+    <div class="f2"><label>Калории, ккал<input class="input" name="kcal" inputmode="decimal" value="${tot ? v(tot.kcal) : ''}"></label><label>Белки, г<input class="input" name="p" inputmode="decimal" value="${tot ? v(tot.p) : ''}"></label>
+      <label>Жиры, г<input class="input" name="f" inputmode="decimal" value="${tot ? v(tot.f) : ''}"></label><label>Углеводы, г<input class="input" name="c" inputmode="decimal" value="${tot ? v(tot.c) : ''}"></label></div>
+    <p class="muted sm" data-k="chk">Можно вписать только калории или только БЖУ — калории тогда посчитаются сами.</p>
+    <div class="f2"><label>Приём пищи<select class="input" name="meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
+      <label>День<input class="input" type="date" name="date" value="${date}"></label></div>
+    ${item ? '' : '<label class="chk-row"><input type="checkbox" name="save"><span>Сохранить в «Мои продукты», чтобы потом находить поиском</span></label>'}
+    <button class="btn primary block">${item ? 'Сохранить' : 'Добавить в дневник'}</button></form>` });
+  const f = s.querySelector('[data-k=f]'); let mode = 'total';
+  const segs = s.querySelector('[data-k=mode]');
+  segs.onclick = (e) => { const bt = e.target.closest('[data-m]'); if (!bt) return; mode = bt.dataset.m; segs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === bt)); f.g.placeholder = mode === 'per' ? 'обязательно, например 250' : 'необязательно, например 250'; check(); };
+  const vals = () => ({ g: num(f.g.value), kcal: num(f.kcal.value), p: num(f.p.value), f: num(f.f.value), c: num(f.c.value) });
+  const check = () => {
+    const x = vals(); const chk = s.querySelector('[data-k=chk]'); const has = ['p', 'f', 'c'].some((k) => Number.isFinite(x[k]));
+    const est = (x.p || 0) * 4 + (x.f || 0) * 9 + (x.c || 0) * 4;
+    if (!Number.isFinite(x.kcal) && has) chk.textContent = `Калории посчитаются по БЖУ: ≈ ${fmt(est)} ккал${mode === 'per' ? ' на 100 г' : ''}.`;
+    else if (Number.isFinite(x.kcal) && has && x.kcal > 0 && Math.abs(est - x.kcal) / x.kcal > 0.25) chk.textContent = `⚠ По БЖУ выходит ≈ ${fmt(est)} ккал, а вписано ${fmt(x.kcal)}. Проверьте — возможно, опечатка.`;
+    else if (mode === 'per' && x.g > 0 && Number.isFinite(x.kcal)) chk.textContent = `На ${fmt(x.g)} г выйдет ≈ ${fmt(x.kcal * x.g / 100)} ккал.`;
+    else chk.textContent = 'Можно вписать только калории или только БЖУ — калории тогда посчитаются сами.';
+  };
+  f.addEventListener('input', check); check();
+  f.onsubmit = validated((e) => {
+    e.preventDefault();
+    f.g.value = f.g.value.replace(/[\s ]/g, '');
+    const g = readNum(f, 'g', { min: 1, max: 5000, required: mode === 'per', label: 'Вес' });
+    const lim = mode === 'per' ? { kcal: 950, m: 100 } : { kcal: 6000, m: 600 };
+    let kcal = readNum(f, 'kcal', { min: 0, max: lim.kcal, required: false, label: 'Калории' });
+    const p = readNum(f, 'p', { min: 0, max: lim.m, required: false, label: 'Белки' });
+    const fa = readNum(f, 'f', { min: 0, max: lim.m, required: false, label: 'Жиры' });
+    const c = readNum(f, 'c', { min: 0, max: lim.m, required: false, label: 'Углеводы' });
+    if (kcal == null && p == null && fa == null && c == null) { markInvalid(f.kcal, 'Впишите калории или белки/жиры/углеводы'); return; }
+    if (kcal == null) kcal = r1((p || 0) * 4 + (fa || 0) * 9 + (c || 0) * 4);
+    if (mode === 'per' && (p || 0) + (fa || 0) + (c || 0) > 101) { markInvalid(f.p, 'На 100 г белков, жиров и углеводов вместе не больше 100 г'); return; }
+    const raw = { kcal, p: p || 0, f: fa || 0, c: c || 0, fib: 0, sug: 0, salt: 0 };
+    // в дневнике храним «на 100 г» + граммы; без веса — условные 100 г = вся порция
+    const grams = g || 100; const per = {};
+    NK.forEach((k) => { per[k] = mode === 'per' || !g ? raw[k] : r1(raw[k] / g * 100); });
+    const name = f.name.value.trim() || 'Своя запись';
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(f.date.value) ? f.date.value : date; const m = f.meal.value;
+    const quick = g ? null : { noG: true };
+    if (item) {
+      const day = ensureDay(date); const from = day.meals[meal]; const it = from.find((x) => x.id === item.id);
+      if (it) {
+        Object.assign(it, { name, g: grams, per }); delete it.oil; delete it.unit; if (quick) it.quick = quick; else delete it.quick;
+        if (d !== date || m !== meal) { day.meals[meal] = from.filter((x) => x.id !== it.id); ensureDay(d).meals[m].push(it); saveDay(d); }
+      }
+      saveDay(date); Sheet.closeAll(); render(); toast('Сохранено'); return;
+    }
+    let food = { id: 'q_' + uid(), name, brand: '', per };
+    if (f.save && f.save.checked) {
+      const id = uid(); D.foods[id] = { kind: 'food', id, name, brand: '', cat: 'custom', barcode: '', per, portion: { g: grams, label: g ? 'порция' : '1 порция' }, updated: Date.now() };
+      persist('food-' + id); invalidateFoods(); food = customAsFood(D.foods[id]);
+    }
+    addToDiary(d, m, food, grams);
+    const day = ensureDay(d); const last = day.meals[m][day.meals[m].length - 1]; if (quick && last) { last.quick = quick; saveDay(d); }
+    Sheet.closeAll(); if (App.page === 'diary') App.diaryDate = d; render();
+    toast(`Добавлено: ${name} — ${fmt(scaleN(per, grams).kcal)} ккал${f.save && f.save.checked ? ' · сохранено в «Мои продукты»' : ''}`);
+  });
+  setTimeout(() => { const first = item ? f.kcal : f.name; if (window.innerWidth > 700) first.focus(); }, 150);
+}
 
 /* Действия с приёмом пищи: копировать, сохранить как блюдо, очистить */
 ACT.mealMenu = (el) => {

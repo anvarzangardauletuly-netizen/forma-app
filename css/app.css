@@ -521,3 +521,6 @@ p.center, .muted.center { text-align: center; }
 details > summary { cursor: pointer; list-style: none; padding: 6px 0; } details > summary::-webkit-details-marker { display: none; }
 details > summary::before { content: "▸ "; color: var(--muted); } details[open] > summary::before { content: "▾ "; }
 .banner.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+
+.form .chk-row, .chk-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--text); cursor: pointer; }
+.chk-row input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--accent-ink); }
