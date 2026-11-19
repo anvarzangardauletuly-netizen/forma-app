@@ -9,8 +9,8 @@ import csv, gzip, io, json, os, re, sys, datetime, urllib.request
 
 URL = "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"
 UA = "FORMA-import/1.0 (open-source calorie tracker)"
-OUT = os.path.join(os.path.dirname(__file__), "..", "data", "foods-off.json")
-COUNTRIES = ("en:kazakhstan", "en:russia")
+OUT = os.environ.get("OUT") or os.path.join(os.path.dirname(__file__), "..", "data", "foods-off.json")
+COUNTRIES = ("en:kazakhstan", "en:russia", "en:belarus", "en:uzbekistan", "en:kyrgyzstan", "en:ukraine", "en:armenia", "en:georgia", "en:azerbaijan", "en:tajikistan", "en:moldova")
 CYR = re.compile(r"[а-яёәіңғүұқөһ]", re.I)
 csv.field_size_limit(10 ** 8)
 
@@ -29,7 +29,9 @@ def clean(s, n=90):
 
 def convert(r):
     tags = r.get("countries_tags") or ""
-    if not any(c in tags for c in COUNTRIES):
+    ru_name = CYR.search(str(r.get("product_name_ru") or "")) or CYR.search(str(r.get("product_name") or ""))
+    # товары стран СНГ (продаются в Казахстане) + любые товары с русским названием
+    if not any(c in tags for c in COUNTRIES) and not ru_name:
         return None
     kcal = num(r.get("energy-kcal_100g"))
     if kcal is None and num(r.get("energy_100g")) is not None:
@@ -88,7 +90,7 @@ def main():
     items.sort(key=lambda x: -x[11])
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
-        json.dump({"v": datetime.date.today().isoformat(), "src": "Open Food Facts (ODbL), страны: Казахстан, Россия", "items": items},
+        json.dump({"v": datetime.date.today().isoformat(), "src": "Open Food Facts (ODbL): Казахстан, Россия и страны СНГ, товары с русским названием", "items": items},
                   f, ensure_ascii=False, separators=(",", ":"))
     print(f"готово: {len(items):,} товаров из {rows:,} строк → {OUT}", file=sys.stderr)
 

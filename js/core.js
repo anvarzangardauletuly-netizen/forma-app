@@ -431,18 +431,25 @@ function invalidateFoods() { _foodsCache = null; }
 /* Магазинные товары (Open Food Facts: Казахстан и Россия, ~10 тыс. со штрихкодами).
    Отдельный файл data/foods-off.json: грузится после запуска, кэшируется service worker'ом и работает офлайн. */
 const StoreFoods = {
-  list: [], byId: new Map(), byCode: new Map(), loaded: false, src: '',
+  list: [], byId: new Map(), byCode: new Map(), loaded: false, src: '', parts: 0,
+  /* Части базы: сначала популярные товары, потом остальные — в фоне, чтобы запуск не тормозил */
+  FILES: ['data/foods-off.json', 'data/foods-off-2.json'],
   async load() {
-    try {
-      const r = await withTimeout(fetch('data/foods-off.json'), 30000); if (!r.ok) throw new Error('http ' + r.status);
-      const j = await r.json(); this.src = j.src || ''; this.version = j.v || '';
-      this.list = (j.items || []).map(([code, name, brand, kcal, p, f, c, fib, sug, salt, g, pop]) => ({
-        id: 'o' + code, name, brand: brand || '', cat: 'store', barcode: code, pop: pop || 0,
-        per: { kcal, p, f, c, fib, sug, salt }, portion: { g: g || 100, label: g && g !== 100 ? 'порция' : '100 г' }, base: true, store: true,
-      }));
-      this.list.forEach((x) => { this.byId.set(x.id, x); this.byCode.set(x.barcode.replace(/^0+/, ''), x); });
-      this.loaded = true; invalidateFoods();
-    } catch (e) { console.warn('store foods', e); }
+    for (const [i, file] of this.FILES.entries()) {
+      try {
+        if (i > 0) await sleep(2500);
+        const r = await withTimeout(fetch(file), 60000); if (!r.ok) { if (r.status === 404) break; throw new Error('http ' + r.status); }
+        const j = await r.json(); if (i === 0) { this.src = j.src || ''; this.version = j.v || ''; }
+        const add = (j.items || []).map(([code, name, brand, kcal, p, f, c, fib, sug, salt, g, pop]) => ({
+          id: 'o' + code, name, brand: brand || '', cat: 'store', barcode: code, pop: pop || 0,
+          per: { kcal, p, f, c, fib, sug, salt }, portion: { g: g || 100, label: g && g !== 100 ? 'порция' : '100 г' }, base: true, store: true,
+        })).filter((x) => !this.byId.has(x.id));
+        add.forEach((x) => { this.byId.set(x.id, x); this.byCode.set(x.barcode.replace(/^0+/, ''), x); });
+        this.list = this.list.concat(add); this.parts++;
+        this.loaded = true; invalidateFoods();
+        if (i > 0 && booted && App.page === 'foods' && !Sheet.stack.length) render();
+      } catch (e) { console.warn('store foods', file, e); break; }
+    }
   },
   findCode(code) { return this.byCode.get(String(code).replace(/^0+/, '')) || null; },
 };
