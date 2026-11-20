@@ -1,0 +1,30 @@
+# Сборка Android-приложения FORMA. Результат — файл APK во вкладке Actions → запуск → Artifacts.
+# APK можно установить на Android-телефон для проверки (разрешите установку из неизвестных источников).
+name: Android (тестовая сборка)
+
+on:
+  push:
+    branches: [main]
+    paths: ['js/**', 'css/**', 'index.html', 'data/**', 'android/**', 'capacitor.config.json', 'package.json', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - run: npm ci
+      - run: npm run web && npx cap sync android
+      - name: Сборка APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FORMA-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

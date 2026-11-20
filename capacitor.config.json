@@ -1,0 +1,12 @@
+{
+  "appId": "kz.forma.app",
+  "appName": "FORMA",
+  "webDir": "www",
+  "backgroundColor": "#0b0b0b",
+  "ios": { "contentInset": "never", "limitsNavigationsToAppBoundDomains": false },
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 600, "backgroundColor": "#0b0b0b", "showSpinner": false },
+    "LocalNotifications": { "iconColor": "#c8f031" }
+  }
+}

@@ -239,6 +239,7 @@ const healthFn = () => SUPA_URL + '/functions/v1/health-steps'; // SUPA_URL об
 function healthShortcutName() { return (settings().healthShortcut || 'FORMA').trim() || 'FORMA'; }
 /* Кнопка «Обновить шаги»: запускает команду iPhone и возвращает в FORMA (x-callback-url) */
 function healthRefreshBtn(cls = 'btn sm') {
+  if (typeof Native !== 'undefined' && Native.on) return NativeHealth.enabled() ? `<button class="${cls}" data-act="healthNativeSync">${ic('heart', 16)}Обновить шаги</button>` : '';
   if (!(Store.backend === 'supa' && Supa.user && D['health-token'])) return '';
   return `<button class="${cls}" data-act="healthRun">${ic('heart', 16)}Обновить из «Здоровья»</button>`;
 }
@@ -252,7 +253,18 @@ ACT.healthRun = () => {
 ACT.healthName = (el) => { const v = el.value.trim().slice(0, 60); setSetting('healthShortcut', v || 'FORMA'); toast(`Команда: «${v || 'FORMA'}»`); };
 function healthTokenLocal() { try { return localStorage.getItem(LS + 'healthToken:' + Store.uid) || ''; } catch (e) { return ''; } }
 function healthLink(t) { return `${healthFn()}?t=${t}&n=`; }
+/* В приложении: шаги напрямую из «Здоровья» / Health Connect */
+function nativeHealthHTML() {
+  const on = NativeHealth.enabled();
+  const body = on ? `<div class="banner ok">${ic('check', 18)}<div>${Native.healthName} подключено. Шаги обновляются сами при каждом открытии FORMA и каждые 5 минут.${NativeHealth.lastError ? `<br><small class="muted">Последняя ошибка: ${esc(NativeHealth.lastError)}</small>` : ''}</div></div>
+      <div class="row gap8 mt12 wrap"><button class="btn primary" data-act="healthNativeSync">${ic('heart', 18)}Обновить сейчас</button><button class="btn ghost sm" data-act="healthNativeOff">Отключить</button></div>`
+    : `<p class="muted">${Native.isIOS ? 'iPhone считает шаги весь день сам — даже когда FORMA закрыта.' : 'Health Connect собирает шаги с телефона, часов и фитнес-приложений.'} Разрешите FORMA читать шаги — и они будут появляться здесь автоматически.</p>
+      <button class="btn primary mt12" data-act="healthNativeConnect">${ic('heart', 18)}Подключить ${Native.healthName}</button>
+      <p class="muted sm mt8">FORMA только читает количество шагов. Ничего не записывает и не передаёт третьим лицам.</p>`;
+  return `<section class="card fade"><div class="card-h"><div><h3>${ic('heart', 18)}Шаги из ${Native.isIOS ? '«Здоровья»' : 'Health Connect'}</h3><small class="muted">автоматически</small></div></div>${body}</section>`;
+}
 function healthSyncHTML(ios) {
+  if (typeof Native !== 'undefined' && Native.on) return nativeHealthHTML();
   const signed = Store.backend === 'supa' && Supa.user;
   const doc = D['health-token']; const tok = healthTokenLocal(); const last = lastHealthSync();
   const lastTxt = last ? `Последнее обновление: ${fmtDate(last.date).toLowerCase()}, ${new Date(last.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} — ${fmt(last.steps)} шагов` : 'Данных из «Здоровья» пока не было.';

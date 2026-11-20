@@ -70,6 +70,7 @@ function applyTheme() {
   root.style.setProperty('--accent-ink', dark ? c : ink);
   root.style.setProperty('--on-accent', S.accent === 'blue' ? '#ffffff' : '#0b0b0b');
   const meta = $('meta[name=theme-color]'); if (meta) meta.content = dark ? '#0b0b0b' : '#f3f3f1';
+  if (typeof Native !== 'undefined' && Native.on) { try { Native.plugin('StatusBar').setStyle({ style: dark ? 'DARK' : 'LIGHT' }); } catch (e) { /* нет плагина */ } }
 }
 if (mq && mq.addEventListener) mq.addEventListener('change', () => { applyTheme(); if (booted) render(); });
 
@@ -83,7 +84,7 @@ const Reminders = {
     try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) { /* нет вибро */ }
   },
   tick() {
-    if (!booted || !D.profile) return; const S = settings(); if (!S.rem || !S.rem.on) return;
+    if (!booted || !D.profile || Native.on) return; const S = settings(); if (!S.rem || !S.rem.on) return; // в приложении — системные уведомления (native.js)
     const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`; const t = todayISO();
     MEALS.forEach((m) => { const time = S.rem.meals[m.id]; if (time && time === hm && !(getDay(t).meals[m.id] || []).length) this.fire(`${m.name}: не забудьте записать, что съели`, t + m.id + hm); });
     if (+S.rem.water > 0 && hm >= S.rem.from && hm < S.rem.to) {
@@ -108,6 +109,7 @@ async function boot() {
   } catch (e) { console.error(e); toast('Не удалось загрузить данные', 'err'); }
   try { applyHealthSteps(); } catch (e) { console.warn(e); }
   applyTheme(); booted = true;
+  if (Native.on) nativeBoot();
   $('#splash').classList.add('hide'); setTimeout(() => $('#splash') && $('#splash').remove(), 500);
   route();
   if (Store.cloudNote && Store.mode !== 'cloud') setTimeout(() => toast(Store.cloudNote, 'warn', 6000), 600);
@@ -123,7 +125,7 @@ const PWA = {
   prompt: null, standalone: false,
   init() {
     this.standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-    if (!IN_FRAME && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    if (!IN_FRAME && !Native.on && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
       navigator.serviceWorker.register('sw.js').then((reg) => {
         // Проверяем обновление при каждом возврате в приложение и раз в 30 минут
         const check = () => reg.update().catch(() => {});
@@ -145,7 +147,7 @@ const PWA = {
     window.addEventListener('online', () => toast('Интернет снова есть'));
   },
   canShow() {
-    if (IN_FRAME || this.standalone) return false;
+    if (IN_FRAME || this.standalone || Native.on) return false;
     try { if (localStorage.getItem('forma:installHidden')) return false; } catch (e) { /* нет хранилища */ }
     return !!this.prompt || /iPhone|iPad|iPod/.test(navigator.userAgent);
   },

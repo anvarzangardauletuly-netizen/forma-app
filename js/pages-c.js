@@ -548,6 +548,7 @@ ACT.remSave = (f) => {
   MEALS.forEach((m) => { rem.meals[m.id] = f['m_' + m.id].value; });
   if (rem.from >= rem.to) { toast('Время «с» должно быть раньше «до»', 'err'); return; }
   setSetting('rem', rem); toast(rem.on ? 'Напоминания включены' : 'Напоминания выключены');
+  if (Native.on) { NativeNotify.schedule(); return; }
   if (rem.on && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission().catch(() => {}); } catch (e) { /* в песочнице может быть недоступно */ } }
 };
 ACT.remTest = () => Reminders.fire('Так выглядит напоминание FORMA', 'test');

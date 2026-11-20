@@ -1,0 +1,27 @@
+{
+  "name": "forma-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FORMA — питание, КБЖУ, шаги и тренировки. Сайт (Vercel) и приложение для iPhone/Android (Capacitor).",
+  "scripts": {
+    "web": "node scripts/build-web.mjs",
+    "sync": "node scripts/build-web.mjs && npx cap sync",
+    "assets": "npx capacitor-assets generate --ios --android --iconBackgroundColor '#c8f031' --iconBackgroundColorDark '#c8f031' --splashBackgroundColor '#0b0b0b' --splashBackgroundColorDark '#0b0b0b'",
+    "android": "npm run sync && npx cap open android",
+    "ios": "npm run sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/local-notifications": "8.3.1",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4",
+    "@capgo/capacitor-health": "8.13.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.2"
+  }
+}

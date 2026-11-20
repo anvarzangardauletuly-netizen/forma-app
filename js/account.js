@@ -193,8 +193,10 @@ function authHTML() {
   </div></div>`;
 }
 /* После показа экрана входа: оставляем только включённые способы входа */
+/* В приложении (Capacitor) адрес страницы — localhost, поэтому письма и вход ведут на сайт FORMA */
+function authReturnUrl() { return Native.on ? 'https://forma-app-green-beta.vercel.app/' : location.origin + location.pathname; }
 async function authMount() {
-  const prov = await Supa.providers();
+  const prov = Native.on ? {} : await Supa.providers(); // вход через Google в приложении подключим отдельно (нужна ссылка-возврат в приложение)
   const box = $('#authOauth'); if (!box) return;
   let shown = 0;
   box.querySelectorAll('[data-act=oauth]').forEach((b) => { const on = !!prov[b.dataset.p]; b.hidden = !on; if (on) shown++; });
@@ -212,7 +214,7 @@ ACT.oauth = async (el) => {
   if (!prov[el.dataset.p]) { toast(`Вход через ${name} пока не подключён. Войдите по e-mail.`, 'warn', 5000); el.hidden = true; return; }
   try {
     const c = await Supa.lib();
-    const { error } = await c.auth.signInWithOAuth({ provider: el.dataset.p, options: { redirectTo: location.origin + location.pathname, queryParams: el.dataset.p === 'google' ? { prompt: 'select_account' } : undefined } });
+    const { error } = await c.auth.signInWithOAuth({ provider: el.dataset.p, options: { redirectTo: authReturnUrl(), queryParams: el.dataset.p === 'google' ? { prompt: 'select_account' } : undefined } });
     if (error) throw error;
   } catch (e) {
     const off = /not enabled|unsupported provider/i.test((e && e.message) || '');
@@ -228,7 +230,7 @@ ACT.emailAuth = async (f) => {
   try {
     const c = await Supa.lib();
     if (mode === 'up') {
-      const { data, error } = await c.auth.signUp({ email, password: pass, options: { emailRedirectTo: location.origin + location.pathname } });
+      const { data, error } = await c.auth.signUp({ email, password: pass, options: { emailRedirectTo: authReturnUrl() } });
       if (error) throw error;
       if (!data.session) { Sheet.open({ title: 'Подтвердите e-mail', body: `<p class="lead">Мы отправили письмо на <b>${esc(email)}</b>.</p><p class="muted">Откройте ссылку из письма на этом устройстве — и вы войдёте. Проверьте папку «Спам».</p>` }); return; }
     } else {
@@ -244,7 +246,7 @@ ACT.emailAuth = async (f) => {
 ACT.resetPass = async () => {
   const f = $('form[data-sub=emailAuth]'); const email = f.email.value.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { markInvalid(f.email, 'Сначала введите свой e-mail'); return; }
-  try { const c = await Supa.lib(); const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); if (error) throw error; toast('Письмо для смены пароля отправлено', 'ok', 5000); }
+  try { const c = await Supa.lib(); const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: authReturnUrl() }); if (error) throw error; toast('Письмо для смены пароля отправлено', 'ok', 5000); }
   catch (e) { toast('Ошибка: ' + ((e && e.message) || e), 'err'); }
 };
 function openNewPassword() {

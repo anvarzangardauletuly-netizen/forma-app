@@ -1,8 +1,8 @@
 /* FORMA — service worker: приложение открывается без интернета.
    Файлы приложения: сначала сеть (чтобы обновления приходили сразу), без сети — из кэша.
    Библиотеки и шрифты с CDN: из кэша. Запросы к базе (Supabase) не кэшируются. */
-const CACHE = 'forma-v27';
-const CORE = ['./', 'index.html', 'privacy.html', 'manifest.webmanifest', 'css/app.css', 'js/data.js', 'js/core.js', 'js/charts.js', 'js/pages-a.js', 'js/pages-b.js', 'js/pages-c.js', 'js/steps.js', 'js/discipline.js', 'js/account.js', 'js/main.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'data/foods-off.json'];
+const CACHE = 'forma-v28';
+const CORE = ['./', 'index.html', 'privacy.html', 'manifest.webmanifest', 'css/app.css', 'js/data.js', 'js/core.js', 'js/charts.js', 'js/pages-a.js', 'js/pages-b.js', 'js/pages-c.js', 'js/steps.js', 'js/discipline.js', 'js/account.js', 'js/native.js', 'js/main.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'data/foods-off.json'];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {})); self.skipWaiting(); });

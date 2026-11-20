@@ -1,0 +1,23 @@
+# Проверочная сборка iPhone-версии FORMA (для симулятора, без подписи).
+# Для TestFlight/App Store нужен аккаунт Apple Developer — подпись добавим, когда он появится.
+name: iOS (проверочная сборка)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run web && npx cap sync ios
+      - name: Сборка для симулятора
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -50
