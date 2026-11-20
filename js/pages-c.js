@@ -29,15 +29,15 @@ const AI = {
   },
   /* Задачи по еде: photo (фото тарелки), label (фото этикетки), text (описание словами).
      Внутри claude.ai — через sample, на сайте — через серверную функцию. */
-  async task(task, { blob = null, grams = null, hint = '', text = '' } = {}) {
+  async task(task, { blob = null, grams = null, hint = '', text = '', ...extra } = {}) {
     if (this.server) {
       if (navigator.onLine === false) throw { code: 'offline' };
-      const body = { task, grams, hint, text };
+      const body = { task, grams, hint, text, ...extra };
       if (blob) body.image = await blobToB64(blob);
       const { data, error } = await withTimeout(Supa.client.functions.invoke('food-ai', { body }), 90000, 'AI не ответил вовремя');
       if (error) {
         let info = null; try { info = error.context && typeof error.context.json === 'function' ? await error.context.json() : null; } catch (e) { /* без тела */ }
-        throw { code: (info && info.error) || error.code || 'ai_failed', message: error.message, limit: info && info.limit };
+        throw { code: (info && info.error) || error.code || 'ai_failed', message: error.message, limit: info && info.limit, premium: info && info.premium };
       }
       if (!data || !data.ok) throw { code: (data && data.error) || 'ai_failed' };
       return data.data;
@@ -65,7 +65,8 @@ ${ITEMS}`);
     const c = e && e.code;
     if (c === 'not_granted') return 'Доступ к AI не разрешён для этой страницы.';
     if (c === 'rate_limited' || c === 'busy') return 'AI сейчас занят — попробуйте через минуту.';
-    if (c === 'limit') return `На сегодня лимит распознаваний исчерпан (${(e && e.limit) || 40} в день). Завтра снова можно — а пока добавьте еду через поиск.`;
+    if (c === 'limit') return e && e.premium ? `На сегодня лимит AI исчерпан (${e.limit} в день). Завтра снова можно.` : `Бесплатно — ${(e && e.limit) || 3} AI-распознавания в день, на сегодня они закончились. С Premium — 50 в день (раздел «Ещё → Premium»), или добавьте еду через поиск.`;
+    if (c === 'premium_required') return 'Эта функция доступна в Premium (раздел «Ещё → Premium»).';
     if (c === 'not_configured') return 'Распознавание по фото ещё не включено на сервере (не задан ключ AI). Добавьте еду через поиск или штрихкод.';
     if (c === 'auth') return 'Войдите в аккаунт заново, чтобы пользоваться распознаванием.';
     if (c === 'offline') return 'Нет интернета — распознавание недоступно. Добавьте еду через поиск: база работает без сети.';
@@ -245,7 +246,7 @@ PAGES.planner = {
   title: 'Планировщик', icon: 'cal',
   render() {
     const tab = App.plannerTab;
-    return `<div class="pagehead"><div><h1>Планировщик питания</h1><p class="muted">Меню на неделю, свои рецепты и автоматический список покупок.</p></div></div>
+    return `<div class="pagehead"><div><h1>Планировщик питания</h1><p class="muted">Меню на неделю, свои рецепты и автоматический список покупок.</p></div><button class="btn primary" data-act="aiMenu">${ic('spark', 18)}Меню на день от AI${Premium.active() ? '' : ' ✦'}</button></div>
       <div class="tabs big">${[['week', 'Меню на неделю'], ['recipes', 'Рецепты'], ['shop', 'Покупки']].map(([k, n]) => `<button class="tab ${k === tab ? 'on' : ''}" data-act="plTab" data-t="${k}">${n}</button>`).join('')}</div>
       <div class="fade">${this['tab_' + tab]()}</div>`;
   },
@@ -397,7 +398,7 @@ PAGES.stats = {
     const delta = (a, b, d = 0, u = '') => { const x = a - b; if (!Number.isFinite(x) || (!a && !b) || (!P.logged.length && !P.wos.length)) return '<span class="muted">—</span>'; return `<span class="delta">${x > 0 ? '+' : ''}${fmt(x, d)}${u}</span>`; };
     return `<div class="pagehead"><div><h1>Статистика и аналитика</h1><p class="muted">${fmtDate(from, { full: true })} — ${fmtDate(to, { full: true })} · заполнено ${S.logged.length} из ${len} дн.</p></div>
       <div class="row gap8"><button class="btn" data-act="exportCSV">${ic('download', 16)}CSV</button><button class="btn ghost" data-act="exportJSON">${ic('download', 16)}Резервная копия</button></div></div>
-    <div class="row gap8 wrap center mb12"><div class="seg">${[[7, '7 дн'], [14, '14 дн'], [30, '30 дн'], [90, '90 дн'], ['custom', 'Период']].map(([v, n]) => `<button class="${String(App.statsRange) === String(v) ? 'on' : ''}" data-act="stRange" data-v="${v}">${n}</button>`).join('')}</div>
+    <div class="row gap8 wrap center mb12"><div class="seg">${[[7, '7 дн'], [14, '14 дн'], [30, '30 дн'], [90, '90 дн'], ['custom', 'Период']].map(([v, n]) => `<button class="${String(App.statsRange) === String(v) ? 'on' : ''}" data-act="stRange" data-v="${v}">${n}${(v === 'custom' || v > 30) && !Premium.active() ? ' ✦' : ''}</button>`).join('')}</div>
       ${App.statsRange === 'custom' ? `<form class="row gap8 center" data-sub="stCustom"><input class="input sm" type="date" name="a" value="${from}"><span>—</span><input class="input sm" type="date" name="b" value="${to}" max="${todayISO()}"><button class="btn sm">OK</button></form>` : ''}</div>
     <div class="kpis big">
       <div><span class="muted">Ср. калорийность</span><b>${S.logged.length ? fmt(S.avg.kcal) : '—'}</b><small>цель ${fmt(T.kcal)}</small></div>
@@ -447,7 +448,7 @@ PAGES.stats = {
     Charts.mount($('#stT'), (el) => Charts.bars(el, { labels: weeks.map(fmtShort), tipLabels: weeks.map((w) => 'Неделя с ' + fmtDate(w, { full: true })), values: weeks.map((w) => Object.values(D.workouts).filter((x) => x.date >= w && x.date <= addDays(w, 6)).length), color: 'var(--accent-ink)', unit: 'трен.', empty: 'Нет тренировок за период' }));
   },
 };
-ACT.stRange = (el) => { App.statsRange = el.dataset.v === 'custom' ? 'custom' : +el.dataset.v; if (App.statsRange === 'custom' && !App.statsFrom) { App.statsFrom = addDays(todayISO(), -29); App.statsTo = todayISO(); } render(); };
+ACT.stRange = (el) => { if ((el.dataset.v === 'custom' || +el.dataset.v > 30) && !requirePremium('Статистика за 90 дней и любой период')) return; App.statsRange = el.dataset.v === 'custom' ? 'custom' : +el.dataset.v; if (App.statsRange === 'custom' && !App.statsFrom) { App.statsFrom = addDays(todayISO(), -29); App.statsTo = todayISO(); } render(); };
 ACT.stCustom = (f) => { const a = f.a.value, b = f.b.value; if (!a || !b || a > b) { toast('Проверьте даты: начало должно быть раньше конца', 'err'); return; } if (diffDays(a, b) > 730) { toast('Максимум — 2 года', 'err'); return; } App.statsFrom = a; App.statsTo = b; render(); };
 ACT.openDiary = (el) => { App.diaryDate = el.dataset.d; go('diary'); };
 ACT.exportCSV = () => {
@@ -474,10 +475,11 @@ PAGES.profile = {
     return `<div class="pagehead"><div><h1>Профиль</h1></div></div>
     <div class="grid g2">
       <section class="card">
-        <div class="profile-h"><div class="avatar">${esc((P.name || '?').slice(0, 1).toUpperCase())}</div><div><h2>${esc(P.name || 'Без имени')}</h2>
+        <div class="profile-h"><div class="avatar">${esc((P.name || '?').slice(0, 1).toUpperCase())}</div><div><h2>${esc(P.name || 'Без имени')} ${premBadge()}</h2>
           <p class="muted sm">${Store.backend === 'supa' ? `${ic('check', 14)} ${esc(Store.email || 'Аккаунт')} · данные в облаке` : Store.mode === 'cloud' ? `${ic('check', 14)} Вход через аккаунт Claude · данные в облаке, доступны только вам` : `Локальный режим · данные в этом браузере`}</p></div></div>
         ${typeof Supa !== 'undefined' && Supa.enabled ? `<div class="row gap8 wrap mt12">${Store.backend === 'supa' ? `<button class="btn sm" data-act="signOut">${ic('logout', 16)}Выйти</button>${Supa.isAdmin ? `<a class="btn sm" href="#admin">${ic('user', 16)}Пользователи</a>` : ''}` : `<button class="btn sm primary" data-act="signIn">${ic('user', 16)}Войти или создать аккаунт</button>`}<button class="btn sm ghost" data-act="privacy">Конфиденциальность</button></div>` : ''}
         ${Store.cloudNote ? `<div class="banner warn mt12">${ic('info', 18)}<div>${esc(Store.cloudNote)}</div></div>` : ''}
+        <a href="#premium" class="prem-row mt12">${ic('spark', 18)}<div class="grow"><b>${Premium.active() ? 'FORMA Premium активен' : 'FORMA Premium'}</b><small class="muted">${Premium.active() && Premium.st.until ? 'до ' + new Date(Premium.st.until).toLocaleDateString('ru-RU') : 'AI 50 раз в день, меню от AI, полная статистика'}</small></div>${ic('right', 16)}</a>
         <form class="form mt16" data-sub="profileSave">
           <div class="f2"><label>Имя<input class="input" name="name" value="${esc(P.name || '')}" maxlength="40"></label><label>Возраст<input class="input" name="age" inputmode="numeric" value="${P.age || ''}"></label>
           <label>Пол<select class="input" name="sex"><option value="m" ${P.sex !== 'f' ? 'selected' : ''}>Мужской</option><option value="f" ${P.sex === 'f' ? 'selected' : ''}>Женский</option></select></label>
@@ -540,7 +542,7 @@ ACT.profileSave = validated((f) => {
 });
 function setSetting(k, v) { D.profile = D.profile || {}; D.profile.settings = Object.assign(settings(), { [k]: v }); persist('profile'); applyTheme(); }
 ACT.setTheme = (el) => { setSetting('theme', el.dataset.v); render(); };
-ACT.setAccent = (el) => { setSetting('accent', el.dataset.v); render(); };
+ACT.setAccent = (el) => { if (el.dataset.v !== 'lime' && !requirePremium('Цветовые темы')) return; setSetting('accent', el.dataset.v); render(); };
 ACT.setStepsBudget = (el) => { setSetting('stepsInBudget', el.checked); toast(el.checked ? `Шаги сверх обычного дня (${fmt(STEPS_BASE)}) и бег добавляются к норме` : 'Шаги не влияют на норму'); };
 ACT.setBurned = (el) => { setSetting('addBurned', el.checked); toast(el.checked ? 'Сожжённые калории добавляются к норме' : 'Норма без учёта активности'); };
 ACT.remSave = (f) => {

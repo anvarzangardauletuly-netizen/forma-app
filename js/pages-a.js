@@ -32,6 +32,7 @@ PAGES.dashboard = {
     <div class="hello"><div><h1>${hi}${name ? ', ' + esc(name) : ''}</h1><p class="muted">${WD_FULL[new Date().getDay()]}, ${fmtDate(date, { full: true })}</p></div>
       <button class="btn primary hide-sm" data-act="pick" data-meal="${autoMeal()}" data-date="${date}">${ic('plus', 18)}Добавить еду</button></div>
     ${PWA.bannerHTML()}
+    ${premiumNudgeHTML()}
 
     <section class="card hero fade">
       <div class="hero-main">

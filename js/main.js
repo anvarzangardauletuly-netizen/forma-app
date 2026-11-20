@@ -8,7 +8,7 @@ const IN_FRAME = (() => { try { return window.self !== window.top; } catch (e) {
 const APP_URL = IN_FRAME ? 'https://claude.ai/artifact/NkmVJqqa1d6Zc7DLTgfyH2' : location.origin + '/';
 let booted = false;
 
-const NAV = ['dashboard', 'diary', 'discipline', 'steps', 'foods', 'scan', 'calc', 'weight', 'workouts', 'planner', 'stats', 'ai', 'profile'];
+const NAV = ['dashboard', 'diary', 'discipline', 'steps', 'foods', 'scan', 'calc', 'weight', 'workouts', 'planner', 'stats', 'ai', 'premium', 'profile'];
 const BOTTOM = ['dashboard', 'diary', 'scan', 'workouts'];
 
 function buildShell() {
@@ -110,6 +110,7 @@ async function boot() {
   try { applyHealthSteps(); } catch (e) { console.warn(e); }
   applyTheme(); booted = true;
   if (Native.on) nativeBoot();
+  Premium.init();
   $('#splash').classList.add('hide'); setTimeout(() => $('#splash') && $('#splash').remove(), 500);
   route();
   if (Store.cloudNote && Store.mode !== 'cloud') setTimeout(() => toast(Store.cloudNote, 'warn', 6000), 600);

@@ -280,12 +280,18 @@ PAGES.admin = {
   render() {
     if (!Supa.isAdmin) return emptyState('user', 'Нет доступа', 'Этот раздел доступен только создателю приложения.');
     return `<div class="pagehead"><div><h1>Пользователи</h1><p class="muted">Данные тех, кто дал согласие при регистрации. Только чтение.</p></div><button class="btn" data-act="adminLoad">${ic('timer', 16)}Обновить</button></div>
+      <section class="card"><div class="card-h"><h3>${ic('chart', 18)}Статистика</h3></div><div id="adminStats"><div class="loading">${ic('chart', 20)}Считаю…</div></div></section>
       <section class="card flush"><div id="adminList"><div class="loading" style="padding:20px">${ic('db', 20)}Загружаю…</div></div></section>`;
   },
   mount() { if (Supa.isAdmin) ACT.adminLoad(); },
 };
 ACT.adminLoad = async () => {
   const el = $('#adminList'); if (!el) return;
+  Premium.call('admin-stats').then((s) => {
+    App.adminPrem = s.premiumMap || {}; const box = $('#adminStats'); if (!box) return;
+    box.innerHTML = `<div class="kpis k3"><div><span class="muted">Пользователей</span><b>${fmt(s.users)}</b></div><div><span class="muted">Новых за 7 дней</span><b>${fmt(s.new7)}</b></div><div><span class="muted">Активны сегодня</span><b>${fmt(s.active1)}</b></div>
+      <div><span class="muted">Активны за 7 дней</span><b>${fmt(s.active7)}</b></div><div class="acc"><span>Premium</span><b>${fmt(s.premium)}</b></div><div><span class="muted">Из них пробный</span><b>${fmt(s.trial)}</b></div></div>`;
+  }).catch((e) => { const box = $('#adminStats'); if (box) box.innerHTML = `<p class="muted">Статистика недоступна: ${esc(Premium.errText(e))}</p>`; });
   try {
     const { data, error } = await Supa.client.from('members').select('*').order('last_seen', { ascending: false });
     if (error) throw error;
@@ -302,12 +308,19 @@ ACT.adminUser = async (el) => {
     const days = Object.keys(docs).filter((k) => k.startsWith('day-')).map((k) => normDay(docs[k], k.slice(4))).sort((a, b) => (a.date < b.date ? 1 : -1));
     const ws = ((docs.weights && docs.weights.entries) || []).slice().sort((a, b) => (a.date < b.date ? 1 : -1));
     const wos = Object.keys(docs).filter((k) => k.startsWith('wo-')).map((k) => docs[k]).sort((a, b) => (a.date < b.date ? 1 : -1));
+    const pm = (App.adminPrem || {})[el.dataset.id];
     s.querySelector('.sheet-body').innerHTML = `
-      <div class="kpis k3"><div><span class="muted">Имя</span><b>${esc(P.name || '—')}</b></div><div><span class="muted">Возраст</span><b>${esc(P.age || '—')}</b></div><div><span class="muted">Цель</span><b>${esc((GOALS && GOALS[P.goal]) || P.goal || '—')}</b></div>
+      <div class="banner ${pm ? 'ok' : 'info'}">${ic('spark', 18)}<div><b>${pm ? 'Premium до ' + new Date(pm.until).toLocaleDateString('ru-RU') : 'Без Premium'}</b>
+        <div class="row gap8 wrap mt8">${[[7, '+7 дней'], [30, '+30 дней'], [365, '+1 год'], [-3650, 'Снять']].map(([d, n]) => `<button class="btn sm ${d < 0 ? 'ghost' : ''}" data-grant="${d}">${n}</button>`).join('')}</div></div></div>
+      <div class="kpis k3 mt12"><div><span class="muted">Имя</span><b>${esc(P.name || '—')}</b></div><div><span class="muted">Возраст</span><b>${esc(P.age || '—')}</b></div><div><span class="muted">Цель</span><b>${esc((GOALS && GOALS[P.goal]) || P.goal || '—')}</b></div>
         <div><span class="muted">Норма</span><b>${T.kcal ? fmt(T.kcal) + ' ккал' : '—'}</b></div><div><span class="muted">Вес</span><b>${ws[0] ? fmt(ws[0].kg, 1) + ' кг' : '—'}</b></div><div><span class="muted">Тренировок</span><b>${wos.length}</b></div></div>
       <h4 class="mt16">Питание (последние дни)</h4>
       ${days.length ? `<div class="tscroll"><table class="ntable"><tr><th>Дата</th><th>Ккал</th><th>Б</th><th>Ж</th><th>У</th><th>Вода</th><th>Шаги</th></tr>${days.slice(0, 21).map((d) => { const t = dayTotals(d); return `<tr><td>${fmtShort(d.date)}</td><td>${fmt(t.kcal)}</td><td>${fmt(t.p)}</td><td>${fmt(t.f)}</td><td>${fmt(t.c)}</td><td>${fmt(dayWater(d))}</td><td>${d.steps != null ? fmt(d.steps) : '—'}</td></tr>`; }).join('')}</table></div>` : '<p class="muted">Записей нет.</p>'}
       <h4 class="mt16">Вес</h4>${ws.length ? `<p>${ws.slice(0, 10).map((w) => `${fmtShort(w.date)}: <b>${fmt(w.kg, 1)}</b>`).join(' · ')}</p>` : '<p class="muted">Нет измерений.</p>'}
       <h4 class="mt16">Тренировки</h4>${wos.length ? `<div class="list">${wos.slice(0, 10).map((w) => `<div class="li"><div class="grow"><b>${esc(w.name)}</b><small class="muted">${fmtShort(w.date)} · ${w.durationMin} мин</small></div></div>`).join('')}</div>` : '<p class="muted">Нет тренировок.</p>'}`;
+    s.querySelectorAll('[data-grant]').forEach((b) => { b.onclick = async () => {
+      try { const r = await Premium.call('admin-grant', { user_id: el.dataset.id, days: +b.dataset.grant }); App.adminPrem = Object.assign(App.adminPrem || {}, { [el.dataset.id]: r.premium ? r : undefined }); toast(r.premium ? 'Premium до ' + new Date(r.until).toLocaleDateString('ru-RU') : 'Premium снят'); Sheet.close(); ACT.adminLoad(); }
+      catch (e) { toast(Premium.errText(e), 'err'); }
+    }; });
   } catch (e) { s.querySelector('.sheet-body').innerHTML = `<div class="banner warn">Ошибка: ${esc(e.message || e)}</div>`; }
 };
