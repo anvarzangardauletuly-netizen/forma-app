@@ -32,7 +32,7 @@ const AI = {
   async task(task, { blob = null, grams = null, hint = '', text = '', ...extra } = {}) {
     if (this.server) {
       if (navigator.onLine === false) throw { code: 'offline' };
-      const body = { task, grams, hint, text, ...extra };
+      const body = { task, grams, hint, text, lang: I18N.lang, ...extra };
       if (blob) body.image = await blobToB64(blob);
       const { data, error } = await withTimeout(Supa.client.functions.invoke('food-ai', { body }), 90000, 'AI не ответил вовремя');
       if (error) {
@@ -253,12 +253,12 @@ PAGES.planner = {
   tab_week() {
     const k = App.planDay; const pd = planDay(k); const t = planTotals(k); const T = targets();
     return `<div class="wdays">${PDAYS.map((d) => { const tt = planTotals(d); return `<button class="wday ${d === k ? 'on' : ''}" data-act="plDay" data-d="${d}"><b>${WD[d]}</b><small>${tt.kcal ? fmt(tt.kcal) : '—'}</small></button>`; }).join('')}</div>
-      <section class="card sumcard"><div class="row between"><div><span class="muted">${WD_FULL[k]} · план</span><div class="bignum">${fmt(t.kcal)}<small> / ${fmt(T.kcal)} ккал</small></div></div>
+      <section class="card sumcard"><div class="row between"><div><span class="muted">${WD_FULL[k]} · <span>план</span></span><div class="bignum">${fmt(t.kcal)}<small> / ${fmt(T.kcal)} ккал</small></div></div>
         <div class="row gap8 wrap"><button class="btn sm" data-act="plToDiary">${ic('book', 16)}В дневник</button><button class="btn sm ghost" data-act="plCopyDay">${ic('copy', 16)}Копировать</button><button class="btn sm ghost danger-t" data-act="plClear">${ic('trash', 16)}</button></div></div>
         ${Charts.bar(t.kcal, T.kcal)}<p class="muted sm mt8">Б ${fmt(t.p)}/${T.p} · Ж ${fmt(t.f)}/${T.f} · У ${fmt(t.c)}/${T.c} г</p></section>
       ${MEALS.map((m) => { const items = pd[m.id] || []; const mt = items.reduce((a, it) => addN(a, itemN(it)), zeroN()); return `<section class="card meal">
         <div class="card-h"><div><h3>${ic(m.icon, 18)}${m.name}</h3><small class="muted">${items.length ? fmt(mt.kcal) + ' ккал' : 'Пусто'}</small></div><button class="icon-btn accent" data-act="plAdd" data-meal="${m.id}" aria-label="Добавить">${ic('plus', 18)}</button></div>
-        ${items.length ? `<div class="items">${items.map((it) => `<div class="item"><div class="grow"><b>${esc(it.name)}</b><small class="muted">${fmt(it.g)} г · ${fmt(itemN(it).kcal)} ккал${it.ref && it.ref.startsWith('r_') ? ' · блюдо' : ''}</small></div><button class="icon-btn" data-act="plRm" data-meal="${m.id}" data-id="${it.id}" aria-label="Убрать">${ic('x', 16)}</button></div>`).join('')}</div>` : ''}
+        ${items.length ? `<div class="items">${items.map((it) => `<div class="item"><div class="grow"><b translate="no">${esc(it.name)}</b><small class="muted">${fmt(it.g)} г · ${fmt(itemN(it).kcal)} ккал${it.ref && it.ref.startsWith('r_') ? ' · блюдо' : ''}</small></div><button class="icon-btn" data-act="plRm" data-meal="${m.id}" data-id="${it.id}" aria-label="Убрать">${ic('x', 16)}</button></div>`).join('')}</div>` : ''}
       </section>`; }).join('')}`;
   },
   tab_recipes() {
@@ -275,7 +275,7 @@ PAGES.planner = {
     const done = list.filter((x) => D.plan.shop[x.key]).length;
     return list.length ? `<section class="card"><div class="card-h"><h3>${ic('cart', 18)}Список покупок на неделю</h3><span class="muted sm">${done}/${list.length}</span></div>
       <p class="muted sm">Собран из меню на неделю; блюда разложены на ингредиенты. Сухие крупы указаны в сухом виде.</p>
-      ${Object.entries(groups).map(([c, items]) => `<h4 class="mt12">${esc(FOOD_CATS[c] || 'Другое')}</h4><div class="list">${items.map((x) => `<label class="li shop ${D.plan.shop[x.key] ? 'done' : ''}"><input type="checkbox" data-ch="shopTick" data-k="${esc(x.key)}" ${D.plan.shop[x.key] ? 'checked' : ''}><span class="grow">${esc(x.name)}</span><b>${x.g >= 1000 ? fmt(x.g / 1000, 2) + ' кг' : fmt(x.g) + ' г'}</b></label>`).join('')}</div>`).join('')}
+      ${Object.entries(groups).map(([c, items]) => `<h4 class="mt12">${esc(FOOD_CATS[c] || 'Другое')}</h4><div class="list">${items.map((x) => `<label class="li shop ${D.plan.shop[x.key] ? 'done' : ''}"><input type="checkbox" data-ch="shopTick" data-k="${esc(x.key)}" ${D.plan.shop[x.key] ? 'checked' : ''}><span class="grow" translate="no">${esc(x.name)}</span><b>${x.g >= 1000 ? fmt(x.g / 1000, 2) + ' кг' : fmt(x.g) + ' г'}</b></label>`).join('')}</div>`).join('')}
       <div class="row gap8 wrap mt16"><button class="btn" data-act="shopCopy">${ic('copy', 16)}Копировать список</button><button class="btn ghost" data-act="shopReset">Снять отметки</button></div></section>`
       : emptyState('cart', 'Список пуст', 'Составьте меню во вкладке «Меню на неделю» — список покупок соберётся сам.');
   },
@@ -332,7 +332,7 @@ function openRecipeView(id) {
     <div class="split mt12"><div><h4>Всё блюдо (${sv} порц.)</h4>${nutrTable(n, 100)}</div><div><h4>1 порция</h4>${nutrTable(scaleN(n, 100 / sv), 100)}</div></div>
     ${r.notes ? `<h4>Заметки</h4><p>${esc(r.notes)}</p>` : ''}`,
     foot: `<button class="icon-btn danger-t" data-k="del" aria-label="Удалить">${ic('trash')}</button><button class="icon-btn" data-k="qr" aria-label="QR-код">${ic('qr')}</button><button class="icon-btn" data-k="edit" aria-label="Изменить">${ic('edit')}</button><button class="btn primary grow" data-k="add">В дневник</button>` });
-  const drawIng = () => { s.querySelector('[data-k=sv]').textContent = k; s.querySelector('[data-k=ing]').innerHTML = `<table class="ntable">${r.ingredients.map((i) => `<tr><td>${esc(i.name)}</td><td>${fmt(i.g * k / sv)} г</td></tr>`).join('')}</table>${k !== sv ? `<p class="muted sm">Граммовка пересчитана на ${k} ${plural(k, 'порцию', 'порции', 'порций')}.</p>` : ''}`; };
+  const drawIng = () => { s.querySelector('[data-k=sv]').textContent = k; s.querySelector('[data-k=ing]').innerHTML = `<table class="ntable">${r.ingredients.map((i) => `<tr><td translate="no">${esc(i.name)}</td><td>${fmt(i.g * k / sv)} г</td></tr>`).join('')}</table>${k !== sv ? `<p class="muted sm">Граммовка пересчитана на ${k} ${plural(k, 'порцию', 'порции', 'порций')}.</p>` : ''}`; };
   s.querySelector('[data-k=m]').onclick = () => { k = Math.max(1, k - 1); drawIng(); };
   s.querySelector('[data-k=p]').onclick = () => { k = Math.min(50, k + 1); drawIng(); };
   drawIng();
@@ -351,7 +351,7 @@ function openRecipeEditor(rec) {
       <label class="form mt12">Заметки / способ приготовления<textarea class="input" data-k="notes" rows="3" maxlength="1500">${esc(R.notes || '')}</textarea></label>`,
     foot: `<button class="btn primary grow" data-k="save">Сохранить рецепт</button>` });
   const draw = () => {
-    s.querySelector('[data-k=ing]').innerHTML = R.ingredients.length ? R.ingredients.map((i, idx) => `<div class="ing-row" data-i="${idx}"><span class="grow">${esc(i.name)}<small class="muted"> · ${fmt(i.per.kcal)} ккал/100 г</small></span><label class="g-in"><input class="input" data-f="g" inputmode="decimal" value="${i.g}"><span>г</span></label><button class="icon-btn sm danger-t" data-rm aria-label="Убрать">${ic('x', 16)}</button></div>`).join('') : '<p class="muted">Добавьте ингредиенты и их массу.</p>';
+    s.querySelector('[data-k=ing]').innerHTML = R.ingredients.length ? R.ingredients.map((i, idx) => `<div class="ing-row" data-i="${idx}"><span class="grow"><span translate="no">${esc(i.name)}</span><small class="muted"> · ${fmt(i.per.kcal)} ккал/100 г</small></span><label class="g-in"><input class="input" data-f="g" inputmode="decimal" value="${i.g}"><span>г</span></label><button class="icon-btn sm danger-t" data-rm aria-label="Убрать">${ic('x', 16)}</button></div>`).join('') : '<p class="muted">Добавьте ингредиенты и их массу.</p>';
     tot();
   };
   const tot = () => { const { n, grams } = recipeTotals(R); const sv = Math.max(1, num(s.querySelector('[data-k=sv]').value) || 1);
@@ -396,7 +396,7 @@ PAGES.stats = {
     const [from, to] = periodRange(); const S = periodStats(from, to); const len = S.days.length;
     const P = periodStats(addDays(from, -len), addDays(from, -1)); const T = targets();
     const delta = (a, b, d = 0, u = '') => { const x = a - b; if (!Number.isFinite(x) || (!a && !b) || (!P.logged.length && !P.wos.length)) return '<span class="muted">—</span>'; return `<span class="delta">${x > 0 ? '+' : ''}${fmt(x, d)}${u}</span>`; };
-    return `<div class="pagehead"><div><h1>Статистика и аналитика</h1><p class="muted">${fmtDate(from, { full: true })} — ${fmtDate(to, { full: true })} · заполнено ${S.logged.length} из ${len} дн.</p></div>
+    return `<div class="pagehead"><div><h1>Статистика и аналитика</h1><p class="muted">${fmtDate(from, { full: true })} — ${fmtDate(to, { full: true })} · <span>заполнено ${S.logged.length} из ${len} дн.</span></p></div>
       <div class="row gap8"><button class="btn" data-act="exportCSV">${ic('download', 16)}CSV</button><button class="btn ghost" data-act="exportJSON">${ic('download', 16)}Резервная копия</button></div></div>
     <div class="row gap8 wrap center mb12"><div class="seg">${[[7, '7 дн'], [14, '14 дн'], [30, '30 дн'], [90, '90 дн'], ['custom', 'Период']].map(([v, n]) => `<button class="${String(App.statsRange) === String(v) ? 'on' : ''}" data-act="stRange" data-v="${v}">${n}${(v === 'custom' || v > 30) && !Premium.active() ? ' ✦' : ''}</button>`).join('')}</div>
       ${App.statsRange === 'custom' ? `<form class="row gap8 center" data-sub="stCustom"><input class="input sm" type="date" name="a" value="${from}"><span>—</span><input class="input sm" type="date" name="b" value="${to}" max="${todayISO()}"><button class="btn sm">OK</button></form>` : ''}</div>
@@ -492,6 +492,9 @@ PAGES.profile = {
       <section class="card">
         <div class="card-h"><h3>${ic('flame', 18)}Мои цели</h3><a class="link" href="#calc">Калькулятор</a></div>
         <div class="kpis k3"><div><span class="muted">Калории</span><b>${fmt(T.kcal)}</b></div><div><span class="muted">Белки</span><b>${T.p} г</b></div><div><span class="muted">Жиры</span><b>${T.f} г</b></div><div><span class="muted">Углеводы</span><b>${T.c} г</b></div><div><span class="muted">Вода</span><b>${fmt(T.water)} мл</b></div><div><span class="muted">Шаги</span><b>${fmt(T.steps)}</b></div></div>
+        <h4 class="mt16">Язык</h4>
+        ${I18N.pickerHTML()}
+        ${I18N.lang !== 'ru' ? '<p class="muted sm mt8">Названия продуктов из базы остаются на русском.</p>' : ''}
         <h4 class="mt16">Оформление</h4>
         <div class="seg">${[['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, n]) => `<button class="${S.theme === k ? 'on' : ''}" data-act="setTheme" data-v="${k}">${n}</button>`).join('')}</div>
         <div class="swatches mt12">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="sw ${S.accent === k ? 'on' : ''}" style="background:${c}" data-act="setAccent" data-v="${k}" aria-label="Акцентный цвет ${k}"></button>`).join('')}</div>
@@ -515,7 +518,7 @@ PAGES.profile = {
       </section>
       <section class="card">
         <div class="card-h"><h3>${ic('star', 18)}Любимые продукты</h3><span class="muted sm">${favs.length}</span></div>
-        ${favs.length ? `<div class="list">${favs.slice(0, 10).map((f) => `<div class="li" data-act="foodOpen" data-id="${f.id}" role="button"><div class="grow"><b>${esc(f.name)}</b><small class="muted">${fmt(f.per.kcal)} ккал/100 г</small></div>${ic('right', 16, 'dim')}</div>`).join('')}</div>` : '<p class="muted">Отмечайте продукты звёздочкой при добавлении.</p>'}
+        ${favs.length ? `<div class="list">${favs.slice(0, 10).map((f) => `<div class="li" data-act="foodOpen" data-id="${f.id}" role="button"><div class="grow"><b translate="no">${esc(f.name)}</b><small class="muted">${fmt(f.per.kcal)} ккал/100 г</small></div>${ic('right', 16, 'dim')}</div>`).join('')}</div>` : '<p class="muted">Отмечайте продукты звёздочкой при добавлении.</p>'}
         <div class="card-h mt16"><h3>${ic('fork', 18)}Сохранённые рецепты</h3><a class="link" href="#planner" data-act="toRecipes">Все</a></div>
         ${Object.values(D.recipes).length ? `<div class="list">${Object.values(D.recipes).slice(0, 8).map((r) => `<div class="li" data-act="recOpen" data-id="${r.id}" role="button"><div class="grow"><b>${esc(r.name)}</b></div>${ic('right', 16, 'dim')}</div>`).join('')}</div>` : '<p class="muted">Рецептов пока нет.</p>'}
       </section>
@@ -576,6 +579,7 @@ function onboardingHTML() {
   const nm = (Store.me && Store.me.name) ? Store.me.name.split(' ')[0] : '';
   return `<div class="onb fade"><div class="onb-card card">
     <div class="logo big"><span class="logo-mark"></span>FORMA</div>
+    ${I18N.pickerHTML()}
     <h1>Настроим под вас</h1><p class="muted">Эти данные нужны, чтобы рассчитать калории и БЖУ. Их можно изменить в любой момент.</p>
     <form class="form mt16" data-sub="onbSave">
       <label>Как вас зовут?<input class="input" name="name" maxlength="40" value="${esc(nm)}"></label>

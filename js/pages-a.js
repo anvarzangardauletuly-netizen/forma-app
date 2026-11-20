@@ -270,7 +270,7 @@ function mealCardHTML(day, m, date) {
       <button class="icon-btn accent" data-act="pick" data-meal="${m.id}" data-date="${date}" aria-label="Добавить">${ic('plus', 18)}</button></div></div>
     ${items.length ? `<div class="items">${items.map((it) => { const n = itemN(it); return `
       <button class="item" data-act="itemEdit" data-meal="${m.id}" data-id="${it.id}">
-        <div class="grow"><b>${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${it.quick && it.quick.noG ? 'своя запись' : fmt(it.g)} ${it.quick && it.quick.noG ? '' : isWaterItem(it) || /напит|сок|чай|кофе|компот|кефир|молоко|айран|кола|лимонад|вода/i.test(it.name) ? 'мл' : 'г'}${isWaterItem(it) ? ' · в воду' : ''}${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · ' + esc(it.brand) : ''} · ${macroLine(n)}</small></div>
+        <div class="grow"><b translate="no">${esc(it.name)}</b><small class="muted">${it.unit ? unitText(it.unit, it.unit.n) + ' · ' : ''}${it.quick && it.quick.noG ? 'своя запись' : fmt(it.g)} ${it.quick && it.quick.noG ? '' : isWaterItem(it) || /напит|сок|чай|кофе|компот|кефир|молоко|айран|кола|лимонад|вода/i.test(it.name) ? 'мл' : 'г'}${isWaterItem(it) ? ' · в воду' : ''}${it.oil ? ` + масло ${fmt(it.oil.g)} г` : ''}${it.brand && it.brand !== G ? ' · <span translate="no">' + esc(it.brand) + '</span>' : ''} · ${macroLine(n)}</small></div>
         <span class="kcal">${fmt(n.kcal)}</span></button>`; }).join('')}</div>` : ''}
   </section>`;
 }
@@ -404,7 +404,7 @@ function saveExternalFood(found) {
 }
 function foodRowHTML(f) {
   return `<div class="frow" data-food="${f.id}" role="button" tabindex="0">
-    <div class="grow"><b>${esc(f.name)}</b><small class="muted">${f.brand && f.brand !== G ? esc(f.brand) + ' · ' : ''}${fmt(f.per.kcal)} ккал · Б ${fmt(f.per.p, 1)} · Ж ${fmt(f.per.f, 1)} · У ${fmt(f.per.c, 1)} <span class="dim">/100 г</span></small></div>
+    <div class="grow"><b translate="no">${esc(f.name)}</b><small class="muted">${f.brand && f.brand !== G ? '<span translate="no">' + esc(f.brand) + '</span> · ' : ''}${fmt(f.per.kcal)} ккал · Б ${fmt(f.per.p, 1)} · Ж ${fmt(f.per.f, 1)} · У ${fmt(f.per.c, 1)} <span class="dim">/100 г</span></small></div>
     ${f.external ? '<span class="tag">интернет</span>' : f.store ? '<span class="tag">магазин</span>' : f.recipe ? '<span class="tag">блюдо</span>' : f.custom ? '<span class="tag">моё</span>' : ''}
     ${f.external ? '' : `<button class="icon-btn fav ${isFav(f.id) ? 'on' : ''}" data-fav="${f.id}" aria-label="Избранное">${ic('star', 18)}</button>`}
   </div>`;
@@ -437,7 +437,7 @@ function openAmount(food, ctx) {
   const chips = [...new Set([food.portion && food.portion.g, 50, 100, 150, 200].filter(Boolean))];
   const s = Sheet.open({
     title: editing ? 'Изменить запись' : food.name,
-    body: `${editing ? `<p class="lead">${esc(food.name)}</p><button class="link-btn" data-k="manual">${ic('edit', 14)} Вписать свои ккал и БЖУ</button>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? esc(food.brand) + ' · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
+    body: `${editing ? `<p class="lead" translate="no">${esc(food.name)}</p><button class="link-btn" data-k="manual">${ic('edit', 14)} Вписать свои ккал и БЖУ</button>` : ''}<p class="muted sm">${food.brand && food.brand !== G ? '<span translate="no">' + esc(food.brand) + '</span> · ' : ''}на 100 г: ${fmt(food.per.kcal)} ккал · Б ${fmt(food.per.p, 1)} · Ж ${fmt(food.per.f, 1)} · У ${fmt(food.per.c, 1)}</p>
       ${unit ? `<div class="seg mt8" data-k="modes"><button class="${useUnit ? 'on' : ''}" data-m="u">Штуки / порции</button><button class="${useUnit ? '' : 'on'}" data-m="g">Граммы</button></div>` : ''}
       <div data-k="uBox" ${useUnit ? '' : 'hidden'}>
         <div class="amount"><button class="icon-btn soft lg" data-k="um">${ic('minus')}</button>
@@ -669,7 +669,7 @@ function drawFoodList() {
   const shown = list.slice(0, App.foodLimit);
   el.innerHTML = shown.length ? `<div class="ftable">${shown.map((f) => `
     <div class="frow" data-act="foodOpen" data-id="${f.id}" role="button" tabindex="0">
-      <div class="grow"><b>${esc(f.name)}</b><small class="muted">${esc(f.brand && f.brand !== G ? f.brand : FOOD_CATS[f.cat] || '')}${f.barcode ? ' · ' + esc(f.barcode) : ''}</small></div>
+      <div class="grow"><b translate="no">${esc(f.name)}</b><small class="muted">${esc(f.brand && f.brand !== G ? f.brand : FOOD_CATS[f.cat] || '')}${f.barcode ? ' · ' + esc(f.barcode) : ''}</small></div>
       <div class="fnums"><span><b>${fmt(f.per.kcal)}</b>ккал</span><span class="hide-xs"><b>${fmt(f.per.p, 1)}</b>Б</span><span class="hide-xs"><b>${fmt(f.per.f, 1)}</b>Ж</span><span class="hide-xs"><b>${fmt(f.per.c, 1)}</b>У</span></div>
     </div>`).join('')}</div>${list.length > shown.length ? `<button class="btn block ghost" data-act="foodMore">Показать ещё (${list.length - shown.length})</button>` : ''}`
     : emptyState('search', 'Ничего не найдено', 'Попробуйте другое название или создайте продукт.', `<button class="btn" data-act="foodNew">Создать продукт</button>`);

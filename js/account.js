@@ -173,6 +173,7 @@ window.addEventListener('online', () => setTimeout(supaRetry, 1500));
 function authHTML() {
   return `<div class="onb fade"><div class="onb-card card auth">
     <div class="logo big"><span class="logo-mark"></span>FORMA</div>
+    ${I18N.pickerHTML()}
     <h1>Вход в FORMA</h1><p class="muted">Аккаунт хранит дневник, вес и тренировки в облаке — они одинаковые на телефоне и ноутбуке.</p>
     ${Store.authError ? `<div class="banner warn mt12">${ic('info', 18)}<div>${esc(Store.authError)}</div></div>` : ''}
     <label class="consent mt16"><input type="checkbox" id="consent"><span>Я принимаю <a href="#" data-act="privacy">Политику конфиденциальности</a> и согласен, что создатель FORMA может просматривать мои записи (питание, вес, тренировки, активность) для поддержки и улучшения приложения.</span></label>

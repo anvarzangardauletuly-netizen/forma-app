@@ -73,6 +73,13 @@ function clean(s: unknown, max = 300) {
   return String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
 }
 
+// Язык ответа: названия и комментарии — на языке интерфейса пользователя.
+const LANG_NOTE: Record<"ru" | "kk" | "en", string> = {
+  ru: "",
+  kk: "\nВажно: все тексты в ответе (name, comment) пиши на казахском языке, даже если выше сказано «на русском».",
+  en: "\nImportant: write all texts in the answer (name, comment) in English, even if the instructions above say Russian.",
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "bad_request" }, 405);
@@ -105,6 +112,7 @@ Deno.serve(async (req) => {
   // 3) Запрос к Claude
   const grams = Number(body.grams) > 0 && Number(body.grams) <= 5000 ? Math.round(Number(body.grams)) : null;
   const hint = clean(body.hint, 200);
+  const lang = (["ru", "kk", "en"].includes(String(body.lang)) ? String(body.lang) : "ru") as "ru" | "kk" | "en";
   let content: Anthropic.Beta.BetaContentBlockParam[];
   let schema: Record<string, unknown>;
   if (task === "photo") {
@@ -147,7 +155,7 @@ ${clean(body.prefs, 300) ? `Пожелания пользователя: «${cle
       max_tokens: task === "menu" ? 8000 : 4000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: SYSTEM,
+      system: SYSTEM + LANG_NOTE[lang],
       output_config: { effort: "low", format: { type: "json_schema", schema } },
       messages: [{ role: "user", content }],
     } as any);

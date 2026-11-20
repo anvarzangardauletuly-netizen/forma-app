@@ -540,3 +540,5 @@ details > summary::before { content: "▸ "; color: var(--muted); } details[open
 .prem-mini { text-align: center; } .prem-mini .ic { color: var(--accent-ink); }
 .banner.prem { background: color-mix(in srgb, var(--accent) 16%, var(--card)); }
 @media (max-width: 420px) { .prem-table .ph, .prem-table .pr { grid-template-columns: 1fr 72px 86px; } .prem-table .pr span { font-size: 13px; } }
+.lang-seg { margin: 4px 0 4px; }
+.onb-card .lang-seg { margin: 12px 0 4px; }

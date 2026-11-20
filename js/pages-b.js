@@ -175,7 +175,7 @@ async function handleCode(raw) {
     const g = found.portion && found.portion.g ? found.portion.g : 100;
     out.innerHTML = `<section class="card found fade">
       <div class="row between"><span class="tag ok">${ic('check', 14)}Найдено · ${esc(src)}</span><code class="mono sm">${esc(digits)}</code></div>
-      <h2 class="mt8">${esc(found.name)}</h2><p class="muted">${esc(found.brand || 'Производитель не указан')}</p>
+      <h2 class="mt8" translate="no">${esc(found.name)}</h2><p class="muted">${esc(found.brand || 'Производитель не указан')}</p>
       <div class="per100"><div><b>${fmt(found.per.kcal)}</b><span>ккал</span></div><div><b>${fmt(found.per.p, 1)}</b><span>белки</span></div><div><b>${fmt(found.per.f, 1)}</b><span>жиры</span></div><div><b>${fmt(found.per.c, 1)}</b><span>углеводы</span></div></div>
       <p class="muted sm">на 100 г${found.external ? ' · данные открытой базы, сверьте с упаковкой' : ''}</p>${checksum}
       <form class="form mt12" data-k="add"><div class="f2"><label>Съедено, г<input class="input" name="g" inputmode="decimal" value="${g}"></label>

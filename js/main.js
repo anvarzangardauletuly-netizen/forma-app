@@ -97,6 +97,7 @@ setInterval(() => Reminders.tick(), 20000);
 
 /* ---------- Запуск ---------- */
 async function boot() {
+  try { await I18N.init(); } catch (e) { console.warn(e); }
   buildShell();
   try {
     const docs = await Store.init(); hydrate(docs);

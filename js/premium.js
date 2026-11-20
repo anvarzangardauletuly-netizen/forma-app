@@ -13,6 +13,13 @@ const BILLING = {
   revenuecatAndroid: '',  // goog_… — оттуда же (после Google Play Console)
   entitlement: 'premium',
   prices: { month: 1290, year: 7990 }, // ₸ — для сайта; в приложении цены показывает магазин
+  // Цены сайта по регионам (по часовому поясу устройства). В App Store / Google Play цены по странам задаёт магазин.
+  regions: {
+    KZ: { cur: '₸', month: 1290, year: 7990, before: false },
+    RU: { cur: '₽', month: 249, year: 1590, before: false },
+    UZ: { cur: 'сум', month: 29000, year: 179000, before: false },
+    INT: { cur: '$', month: 2.99, year: 19.99, before: true },
+  },
 };
 
 const Premium = {
@@ -80,18 +87,33 @@ const PREM_FEATURES = [
   ['sun', 'Цветовые темы', 'лайм', '5 цветов'],
   ['heart', 'Поддержка развития FORMA', '', '❤'],
 ];
+function billingRegion() {
+  let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* нет Intl */ }
+  if (/^Asia\/(Almaty|Qyzylorda|Aqtobe|Aqtau|Atyrau|Oral|Qostanay)$/.test(tz)) return 'KZ';
+  if (/^(Europe\/(Moscow|Samara|Volgograd|Kirov|Ulyanovsk|Astrakhan|Saratov|Kaliningrad)|Asia\/(Yekaterinburg|Omsk|Novosibirsk|Barnaul|Tomsk|Novokuznetsk|Krasnoyarsk|Irkutsk|Chita|Yakutsk|Khandyga|Vladivostok|Ust-Nera|Magadan|Sakhalin|Srednekolymsk|Kamchatka|Anadyr))$/.test(tz)) return 'RU';
+  if (/^Asia\/(Tashkent|Samarkand)$/.test(tz)) return 'UZ';
+  return tz ? 'INT' : 'KZ';
+}
+function priceText(v) {
+  const r = BILLING.regions[billingRegion()] || BILLING.regions.KZ;
+  const n = r.cur === '$' ? (+v).toFixed(2) : fmt(v);
+  return r.before ? `${r.cur}${n}` : `${n} ${r.cur}`;
+}
+function regionPrices() { return BILLING.regions[billingRegion()] || BILLING.regions.KZ; }
+
 PAGES.premium = {
   title: 'Premium', icon: 'spark',
   render() {
     const on = Premium.active(); const st = Premium.st; const signed = Premium.signed();
-    const until = st.until ? new Date(st.until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    const until = st.until ? new Date(st.until).toLocaleDateString({ en: 'en-US', kk: 'kk-KZ' }[I18N.lang] || 'ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
     const src = { trial: 'пробный период', admin: 'подарок', store: 'подписка' }[st.src] || (String(st.src || '').startsWith('promo') ? 'промокод' : '');
+    const RP = regionPrices();
     const pkgs = Native.on && Premium.offerings ? Premium.offerings.availablePackages || [] : [];
     const buy = Native.on
       ? (pkgs.length ? pkgs.map((p, i) => `<button class="btn ${i === 0 ? 'primary' : ''} block mt8" data-act="premiumBuy" data-i="${i}">${esc(p.product.title || p.identifier)} — ${esc(p.product.priceString)}</button>`).join('')
         : `<div class="banner info mt12">${ic('info', 18)}<div>Покупка в приложении появится после публикации в ${Native.isIOS ? 'App Store' : 'Google Play'}. А пока — пробный период или промокод.</div></div>`)
-      : `<div class="plans mt12"><button class="plan" data-act="premiumBuy" data-plan="month"><b>${fmt(BILLING.prices.month)} ₸</b><span>в месяц</span></button>
-         <button class="plan best" data-act="premiumBuy" data-plan="year"><i>−48%</i><b>${fmt(BILLING.prices.year)} ₸</b><span>в год · ${fmt(Math.round(BILLING.prices.year / 12))} ₸/мес</span></button></div>`;
+      : `<div class="plans mt12"><button class="plan" data-act="premiumBuy" data-plan="month"><b>${priceText(RP.month)}</b><span>в месяц</span></button>
+         <button class="plan best" data-act="premiumBuy" data-plan="year"><i>−${Math.round((1 - RP.year / (RP.month * 12)) * 100)}%</i><b>${priceText(RP.year)}</b><span>в год · ${priceText(RP.cur === '$' ? Math.round(RP.year / 12 * 100) / 100 : Math.round(RP.year / 12))}/<span>мес</span></span></button></div>`;
     return `<section class="prem-hero fade"><div class="prem-ic">${ic('spark', 30)}</div><h1>FORMA Premium</h1>
         <p>${on ? `Активен до <b>${until}</b>${src ? ` · ${src}` : ''}` : 'Больше AI, меню под ваши цели и полная статистика'}</p></section>
       <section class="card fade"><div class="prem-table"><div class="ph"><span></span><b>Бесплатно</b><b class="acc">Premium</b></div>
@@ -147,7 +169,7 @@ ACT.aiMenu = () => {
       const meals = (data && data.meals) || []; const tot = zeroN();
       meals.forEach((m) => (m.items || []).forEach((x) => addN(tot, scaleN({ kcal: +x.kcal || 0, p: +x.p || 0, f: +x.f || 0, c: +x.c || 0, fib: +x.fib || 0, sug: 0, salt: 0 }, +x.grams || 0))));
       out.innerHTML = `${data.comment ? `<div class="banner info">${ic('info', 18)}<div>${esc(data.comment)}</div></div>` : ''}
-        ${meals.map((m) => `<h4 class="mt12">${esc((MEALS.find((x) => x.id === m.meal) || {}).name || m.meal)}</h4><div class="list">${(m.items || []).map((x) => `<div class="li"><div class="grow"><b>${esc(x.name)}</b><small class="muted">${fmt(x.grams)} г</small></div><span>${fmt((+x.kcal || 0) * (+x.grams || 0) / 100)} ккал</span></div>`).join('')}</div>`).join('')}
+        ${meals.map((m) => `<h4 class="mt12">${esc((MEALS.find((x) => x.id === m.meal) || {}).name || m.meal)}</h4><div class="list">${(m.items || []).map((x) => `<div class="li"><div class="grow"><b translate="no">${esc(x.name)}</b><small class="muted">${fmt(x.grams)} г</small></div><span>${fmt((+x.kcal || 0) * (+x.grams || 0) / 100)} ккал</span></div>`).join('')}</div>`).join('')}
         <div class="preview"><div class="pv-k"><b>${fmt(tot.kcal)}</b><span>ккал</span></div><div><b>${fmt(tot.p)}</b><span>белки</span></div><div><b>${fmt(tot.f)}</b><span>жиры</span></div><div><b>${fmt(tot.c)}</b><span>углеводы</span></div></div>
         <div class="f2 mt12"><label>В дневник на день<input class="input" type="date" data-k="d" value="${tomorrow}"></label><div></div></div>
         <button class="btn primary block mt12" data-k="add">${ic('plus', 18)}Добавить меню в дневник</button>`;
