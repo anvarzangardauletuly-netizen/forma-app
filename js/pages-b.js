@@ -503,7 +503,7 @@ PAGES.workouts = {
     const L = D.programs.list;
     return `<div class="row gap8 wrap mb12"><button class="btn" data-act="progNew">${ic('plus', 16)}Создать программу</button><button class="btn ghost" data-act="progTemplates">${ic('copy', 16)}Из шаблона</button></div>
       ${L.length ? `<div class="grid g2">${L.map((p) => `<section class="card prog">
-        <div class="card-h"><h3>${esc(p.name)}</h3><span class="muted sm">${p.items.length} упр.</span></div>
+        <div class="card-h"><h3>${esc(p.name)}</h3><span class="muted sm">${p.items.length} упр.</span></div>${p.note ? `<p class="muted sm">${esc(p.note)}</p>` : ''}
         <div class="chips">${[...new Set(p.items.map((i) => exById(i.ex).group))].map((g) => `<span class="chip static">${MUSCLES[g]}</span>`).join('')}</div>
         <ol class="ex-mini">${p.items.slice(0, 6).map((i) => `<li>${esc(exById(i.ex).name)} <span class="muted">${i.sets}×${i.reps}${exById(i.ex).unit === 'sec' ? ' сек' : ''}${i.w ? ' · ' + i.w + ' кг' : ''}</span></li>`).join('')}</ol>
         <div class="row gap8 mt12"><button class="btn primary sm grow" data-act="woStart" data-id="${p.id}">${ic('play', 16)}Начать</button><button class="icon-btn" data-act="progEdit" data-id="${p.id}" aria-label="Изменить">${ic('edit')}</button><button class="icon-btn danger-t" data-act="progDel" data-id="${p.id}" aria-label="Удалить">${ic('trash')}</button></div>
@@ -586,7 +586,7 @@ ACT.progDel = async (el) => { const p = D.programs.list.find((x) => x.id === el.
 ACT.progTemplates = () => {
   const s = Sheet.open({ title: 'Шаблоны программ', body: `<div class="menu">${PROGRAM_TEMPLATES.map((t, i) => `<button data-i="${i}">${ic('dumbbell')}<span><b>${esc(t.name)}</b><small class="muted">${t.items.map((x) => exById(x[0]).name).slice(0, 3).join(', ')}…</small></span></button>`).join('')}</div><p class="muted sm">Шаблон копируется к вам — дальше меняйте как угодно.</p>` });
   s.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { const t = PROGRAM_TEMPLATES[+b.dataset.i];
-    D.programs.list.push({ id: uid(), name: t.name, items: t.items.map(([ex, sets, reps, w, rest]) => ({ ex, sets, reps, w, rest })) }); persist('programs'); Sheet.close(); App.woTab = 'programs'; render(); toast('Программа добавлена'); }; });
+    D.programs.list.push({ id: uid(), name: t.name, ...(t.note ? { note: t.note } : {}), items: t.items.map(([ex, sets, reps, w, rest]) => ({ ex, sets, reps, w, rest })) }); persist('programs'); Sheet.close(); App.woTab = 'programs'; render(); toast('Программа добавлена'); }; });
 };
 function openProgramEditor(prog) {
   const P = clone(prog); P.items = P.items || [];
