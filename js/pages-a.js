@@ -428,7 +428,7 @@ function unitText(u, n) { return `${fmt(n, 2)} × ${u.name}`; }
 function openAmount(food, ctx) {
   const editing = ctx.item; let meal = ctx.meal; const mode = ctx.mode || 'diary';
   const unit = foodUnit(food) || (editing && editing.unit) || null;
-  let useUnit = !!unit && (editing ? !!editing.unit : true);
+  let useUnit = !!unit && (editing ? !!editing.unit : !/^порц/i.test(unit.name));
   let g = editing ? editing.g : (unit ? unit.g : 100);
   let cnt = editing && editing.unit ? editing.unit.n : 1;
   const oilOk = mode === 'diary' && !['drink', 'sweet', 'oil', 'sport'].includes(food.cat);
@@ -444,6 +444,7 @@ function openAmount(food, ctx) {
           <label class="amount-in"><input class="input big" data-k="n" inputmode="decimal" value="${cnt}" aria-label="Количество"><span>${unit ? '× ' + esc(unit.name) : ''}</span></label>
           <button class="icon-btn soft lg" data-k="up">${ic('plus')}</button></div>
         <p class="muted sm center">${unit ? `1 ${esc(unit.name)} ≈ ${fmt(unit.g)} г` : ''} · <span data-k="ug"></span></p>
+        <p class="center"><button type="button" class="link-btn" data-k="toG">${ic('edit', 14)} Вписать точные граммы</button></p>
         <div class="chips">${[0.5, 1, 2, 3, 4, 5].map((n) => `<button class="chip" data-n="${n}">${n === 0.5 ? '½' : n}</button>`).join('')}</div>
       </div>
       <div data-k="gBox" ${useUnit ? 'hidden' : ''}>
@@ -500,7 +501,10 @@ function openAmount(food, ctx) {
     if (useUnit && v > 0) nIn.value = Math.round(v / unit.g * 10) / 10; else if (!useUnit && v > 0) inp.value = r0(v);
     modes.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
     s.querySelector('[data-k=uBox]').hidden = !useUnit; s.querySelector('[data-k=gBox]').hidden = useUnit; upd();
+    if (!useUnit) { inp.focus(); inp.select(); }
   };
+  const toG = s.querySelector('[data-k=toG]');
+  if (toG && modes) toG.onclick = () => modes.querySelector('[data-m=g]').click();
   const segs = s.querySelector('[data-k=meals]'); if (segs) segs.onclick = (e) => { const b = e.target.closest('[data-meal]'); if (!b) return; meal = b.dataset.meal; segs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
   const fav = s.querySelector('[data-k=fav]'); if (fav) fav.onclick = () => { toggleFav(food.id); fav.classList.toggle('on', isFav(food.id)); toast(isFav(food.id) ? 'Добавлено в избранное' : 'Убрано из избранного'); };
   const del = s.querySelector('[data-k=del]'); if (del) del.onclick = () => { ctx.onDelete && ctx.onDelete(); Sheet.close(); };
