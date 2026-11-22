@@ -364,7 +364,8 @@ const ServerFoods = {
   },
   toFood(x) {
     const shared = x.src === 'community';
-    return { id: (shared ? 'cf_' : 'off_') + x.code, name: x.name, brand: x.brand || '', cat: 'custom', barcode: x.code,
+    const unent = (s) => String(s || '').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    return { id: (shared ? 'cf_' : 'off_') + x.code, name: unent(x.name), brand: unent(x.brand), cat: 'custom', barcode: x.code,
       per: { kcal: r1(+x.kcal || 0), p: r1(+x.p || 0), f: r1(+x.f || 0), c: r1(+x.c || 0), fib: r1(+x.fib || 0), sug: r1(+x.sug || 0), salt: r1(+x.salt || 0) },
       portion: { g: +x.portion || 100, label: 'порция' }, external: shared ? 'База FORMA (добавили пользователи)' : 'Open Food Facts' };
   },

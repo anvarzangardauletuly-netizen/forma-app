@@ -7,7 +7,7 @@
 
 Запуск: OUT_DIR=/tmp/off python3 scripts/import_off_server.py   (LIMIT=500000 по умолчанию)
 """
-import csv, gzip, heapq, io, json, os, re, sys, urllib.request
+import csv, gzip, heapq, html, io, json, os, re, sys, urllib.request
 
 sys.path.insert(0, os.path.dirname(__file__))
 from import_off_dump import URL, UA, COUNTRIES, CYR, num, clean  # noqa: E402
@@ -44,7 +44,7 @@ def convert(r):
             name = clean(r.get(k), 120); break
     if not name:
         name = clean(r.get("product_name") or r.get("generic_name"), 120)
-    name = re.sub(r"[\x00-\x1f\x7f]", " ", name).strip()
+    name = re.sub(r"[\x00-\x1f\x7f]", " ", html.unescape(name)).strip()
     if len(name) < 3 or not READABLE.search(name):
         return None
     code = re.sub(r"\D", "", str(r.get("code") or ""))
