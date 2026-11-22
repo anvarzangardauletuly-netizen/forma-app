@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FORMA — Публичная оферта</title>
+<link rel="icon" type="image/png" href="icons/icon-192.png?v=2">
+<style>
+  :root { --bg: #f3f3f1; --card: #ffffff; --text: #111; --muted: #666; --accent: #4f6b00; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b0b0b; --card: #161616; --text: #f2f2f2; --muted: #9a9a9a; --accent: #c8f031; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+  .card { background: var(--card); border-radius: 20px; padding: 24px; }
+  h1 { font-size: 26px; margin: 0 0 4px; } h4 { font-size: 17px; margin: 22px 0 6px; }
+  p, li { margin: 0 0 8px; } ul { padding-left: 20px; } .muted { color: var(--muted); } .sm { font-size: 13px; }
+  a { color: var(--accent); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; } td { padding: 6px 0; vertical-align: top; } td:first-child { color: var(--muted); width: 42%; padding-right: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="./">← FORMA</a></p>
+  <div class="card">
+    <h1>Публичная оферта и условия подписки FORMA Premium</h1>
+    <p class="muted sm">Версия 1 · действует с <span data-f="since">—</span></p>
+
+    <h4>1. Кто продаёт</h4>
+    <table>
+      <tr><td>Продавец</td><td data-f="seller">—</td></tr>
+      <tr><td>ИИН / БИН</td><td data-f="bin">—</td></tr>
+      <tr><td>Адрес</td><td data-f="address">—</td></tr>
+      <tr><td>E-mail для обращений</td><td data-f="email">—</td></tr>
+      <tr><td>Телефон</td><td data-f="phone">—</td></tr>
+    </table>
+
+    <h4>2. Что продаётся</h4>
+    <p>Доступ к платным функциям приложения FORMA (FORMA Premium): расширенные AI-функции (до 50 запросов в день), меню на день от AI, статистика за любой период, цветовые темы. Основные функции FORMA бесплатны и остаются доступны без подписки.</p>
+
+    <h4>3. Цена и способ оплаты</h4>
+    <ul>
+      <li>1 месяц — <b>1 290 ₸</b>; 1 год — <b>7 990 ₸</b>. Актуальная цена всегда показывается перед оплатой.</li>
+      <li>Оплата банковской картой (Visa, Mastercard, UnionPay, в том числе Kaspi Gold и Halyk) через платёжную систему. Данные карты вводятся на защищённой странице платёжной системы; продавец номер карты не получает и не хранит.</li>
+      <li>В приложении из Google Play оплата проходит через Google Play по правилам Google.</li>
+    </ul>
+
+    <h4>4. Автопродление</h4>
+    <ul>
+      <li>Подписка продлевается автоматически: в конце каждого оплаченного периода (месяц или год) с карты списывается цена следующего периода.</li>
+      <li>Перед оплатой пользователь видит условия автопродления и подтверждает согласие отдельной отметкой.</li>
+      <li>За 3 дня до каждого списания приложение напоминает о нём.</li>
+      <li>Если списание не прошло, Premium отключается в конце оплаченного периода, повторные попытки списания ограничены.</li>
+    </ul>
+
+    <h4>5. Как отменить</h4>
+    <ul>
+      <li>В приложении: <b>Профиль → Premium → «Отменить подписку»</b>. После отмены списаний больше не будет, Premium работает до конца уже оплаченного периода.</li>
+      <li>Или написать на e-mail продавца — подписку отменят в течение 1 рабочего дня.</li>
+      <li>Подписка из Google Play отменяется в Google Play → Платежи и подписки.</li>
+    </ul>
+
+    <h4>6. Возврат денег</h4>
+    <ul>
+      <li>Если списание прошло по ошибке (например, вы отменили подписку, а деньги списались), деньги возвращаются полностью.</li>
+      <li>Если в течение 14 дней после оплаты вы передумали — напишите на e-mail, деньги за оплаченный период вернутся на ту же карту.</li>
+      <li>Возврат проходит на карту, с которой была оплата, обычно за 3–10 рабочих дней (зависит от банка).</li>
+    </ul>
+
+    <h4>7. Прочее</h4>
+    <ul>
+      <li>Оплачивая подписку, пользователь принимает эту оферту. Если пользователю нет 18 лет, оплата возможна с согласия родителя или законного представителя.</li>
+      <li>Обработка персональных данных — по <a href="privacy.html">Политике конфиденциальности</a>.</li>
+      <li>FORMA не является медицинским сервисом.</li>
+      <li>Споры решаются переговорами, а при недостижении согласия — по законодательству Республики Казахстан.</li>
+    </ul>
+  </div>
+</main>
+<script>
+  /* Реквизиты продавца — заполняются после регистрации ИП */
+  const OFFER = { since: '', seller: '', bin: '', address: '', email: '', phone: '' };
+  document.querySelectorAll('[data-f]').forEach((el) => { const v = OFFER[el.dataset.f]; el.textContent = v || 'уточняется'; });
+</script>
+</body>
+</html>

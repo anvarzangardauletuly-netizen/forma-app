@@ -174,13 +174,62 @@ ACT.premiumPromo = async (f) => {
 };
 ACT.premiumBuy = async (el) => {
   if (Native.on) { const pkgs = (Premium.offerings && Premium.offerings.availablePackages) || []; const p = pkgs[+el.dataset.i]; if (p) Premium.rcBuy(p); return; }
-  try { const r = await Premium.call('checkout', { plan: el.dataset.plan }); if (r && r.url) location.href = r.url; }
-  catch (e) {
-    Sheet.open({ title: 'Оплата картой — скоро', body: `<p class="lead">Оплата на сайте подключается.</p>
-      <p class="muted">А пока Premium можно получить так:</p><ul class="recs"><li>${ic('spark', 18)}<span>${Premium.st.trial_used ? 'Пробный период уже использован' : '7 дней бесплатно — кнопка выше'}</span></li>
-      <li>${ic('star', 18)}<span>Промокод — у создателя FORMA или в соцсетях приложения</span></li><li>${ic('download', 18)}<span>Покупка в приложении FORMA для iPhone и Android — после публикации в магазинах</span></li></ul>` });
-  }
+  openCheckout(el.dataset.plan || 'month');
 };
+
+/* ---------- Оформление подписки картой (сайт) ----------
+   Карта вводится на защищённой странице платёжной системы — FORMA номер карты не видит и не хранит.
+   Сервер (функция premium, действие checkout) создаёт платёж с автопродлением и возвращает ссылку на оплату. */
+const CARD_BRANDS = `<div class="card-brands" aria-label="Принимаем карты">
+  <span class="cb visa" title="Visa">VISA</span>
+  <span class="cb mc" title="Mastercard"><i></i><i></i></span>
+  <span class="cb kaspi" title="Kaspi Gold">Kaspi Gold</span>
+  <span class="cb halyk" title="Halyk">Halyk</span>
+  <span class="cb up" title="UnionPay">UnionPay</span></div>`;
+function openCheckout(plan) {
+  const RP = regionPrices(); const cur = RP.cur === '₸';
+  const price = (pl) => (cur ? BILLING.prices[pl] : RP[pl]);
+  let sel = plan === 'year' ? 'year' : 'month';
+  const s = Sheet.open({ title: 'Оформление Premium', body: `
+    <div class="seg co-plans" data-k="plans">
+      <button type="button" data-p="month">Месяц<small>${priceText(price('month'))}</small></button>
+      <button type="button" data-p="year">Год<small>${priceText(price('year'))}</small></button></div>
+    <h4 class="mt16">Способ оплаты</h4>
+    <div class="co-method on">${ic('card', 20)}<div class="grow"><b>Банковская карта</b><small class="muted">Kaspi Gold, Halyk, любая Visa / Mastercard / UnionPay</small></div>${ic('check', 18)}</div>
+    ${CARD_BRANDS}
+    <div class="co-terms mt16" data-k="terms"></div>
+    <label class="consent mt12"><input type="checkbox" data-k="ok"><span>Я согласен с <a href="offer.html" target="_blank" rel="noopener">условиями подписки</a> и автоматическим списанием. Отменить можно в любой момент.</span></label>
+    <p class="muted sm mt12">${ic('lock', 14)} Данные карты вводятся на защищённой странице платёжной системы. FORMA не видит и не хранит номер карты.</p>`,
+    foot: `<button class="btn primary grow lg" data-k="pay" disabled></button>` });
+  const terms = s.querySelector('[data-k=terms]'); const pay = s.querySelector('[data-k=pay]'); const ok = s.querySelector('[data-k=ok]');
+  const draw = () => {
+    s.querySelectorAll('[data-p]').forEach((b) => b.classList.toggle('on', b.dataset.p === sel));
+    const p = priceText(price(sel)); const per = sel === 'year' ? 'год' : 'месяц';
+    terms.innerHTML = `<b>Это подписка с автопродлением</b>
+      <ul><li>Сегодня спишется <b>${p}</b> — Premium на ${sel === 'year' ? '1 год' : '1 месяц'}.</li>
+      <li>Дальше <b>${p}</b> будет списываться автоматически раз в ${per}, пока вы не отмените подписку.</li>
+      <li>Напомним за 3 дня до каждого списания.</li>
+      <li>Отменить: <b>Профиль → Premium → «Отменить подписку»</b>. Premium останется до конца оплаченного срока.</li></ul>`;
+    pay.textContent = `Оплатить ${p}`; pay.disabled = !ok.checked;
+  };
+  s.querySelector('[data-k=plans]').onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) { sel = b.dataset.p; draw(); } };
+  ok.onchange = draw;
+  pay.onclick = async () => {
+    if (!Premium.signed()) { Sheet.closeAll(); go('profile'); toast('Войдите в аккаунт, чтобы оформить Premium', 'warn'); return; }
+    pay.disabled = true; pay.textContent = 'Открываю оплату…';
+    try {
+      const r = await Premium.call('checkout', { plan: sel, consent: true, lang: I18N.lang });
+      if (r && r.url) { location.href = r.url; return; }
+      throw { code: 'not_configured' };
+    } catch (e) {
+      terms.insertAdjacentHTML('afterend', `<div class="banner info mt12">${ic('info', 18)}<div>${e && e.code === 'not_configured'
+        ? 'Оплата картой подключается и скоро заработает. А пока — 7 дней бесплатно или промокод.' : esc(Premium.errText(e))}</div></div>`);
+      draw();
+    }
+  };
+  draw();
+}
+
 /* ---------- Оплата переводом (Kaspi): перевод → «Я оплатил» → создатель подтверждает ---------- */
 ACT.payOpen = (el) => {
   const P = Premium.pay; if (!P) return; const plan = el.dataset.plan; const amount = plan === 'year' ? P.year : P.month;

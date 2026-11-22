@@ -549,3 +549,21 @@ details > summary::before { content: "▸ "; color: var(--muted); } details[open
 .pay-copy b { font-size: 18px; letter-spacing: .5px; }
 .pay-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .pay-req { display: grid; gap: 4px; }
+/* Оформление подписки картой */
+.co-plans button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; }
+.co-plans button small { font-weight: 600; opacity: .8; }
+.co-method { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--accent); background: var(--card2); margin-top: 8px; }
+.co-method small { display: block; }
+.card-brands { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.card-brands .cb { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 52px; padding: 0 10px; border-radius: 7px; font-weight: 800; font-size: 12px; letter-spacing: .3px; background: #fff; border: 1px solid #e3e3df; color: #111; }
+.card-brands .visa { color: #1a1f71; font-style: italic; font-size: 14px; letter-spacing: .5px; }
+.card-brands .mc { position: relative; width: 52px; }
+.card-brands .mc i { width: 20px; height: 20px; border-radius: 50%; display: block; }
+.card-brands .mc i:first-child { background: #eb001b; margin-right: -7px; }
+.card-brands .mc i:last-child { background: #f79e1b; mix-blend-mode: multiply; }
+.card-brands .kaspi { background: #f14635; color: #fff; border-color: #f14635; }
+.card-brands .halyk { background: #0a7d4f; color: #fff; border-color: #0a7d4f; }
+.card-brands .up { color: #d6001c; }
+.co-terms { padding: 12px 14px; border-radius: 14px; background: var(--card2); border: 1px solid var(--line); font-size: 14px; line-height: 1.45; }
+.co-terms ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; }

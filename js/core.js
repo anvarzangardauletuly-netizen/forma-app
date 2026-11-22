@@ -62,6 +62,8 @@ const ICONS = {
   right: '<path d="m9 18 6-6-6-6"/>',
   down: '<path d="m6 9 6 6 6-6"/>',
   check: '<path d="m5 12 5 5L20 7"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 10h18M7 15h4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   drop: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/>',
   steps: '<path d="M8 3c-1.7 0-3 2-3 4.5S6 12 6 13h4c0-1 1-3 1-5.5S9.7 3 8 3Z"/><path d="M6 16h4v1.5a2 2 0 0 1-4 0Z"/><path d="M16 7c-1.7 0-3 2-3 4.5s1 4.5 1 5.5h4c0-1 1-3 1-5.5S17.7 7 16 7Z"/><path d="M14 20h4"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.5 1 2.5 2 2.5 0-3 0-5.5 1-8Z"/>',
