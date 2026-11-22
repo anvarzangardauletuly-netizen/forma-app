@@ -123,6 +123,15 @@ document.addEventListener('DOMContentLoaded', boot);
 /* ---------- Офлайн и установка на телефон (PWA) ----------
    На своём сайте (не во фрейме claude.ai) регистрируется service worker: все файлы приложения
    кэшируются, и FORMA открывается и работает без интернета. */
+/* Готовый APK для Android — собирается автоматически (GitHub Actions → релиз android-latest) */
+const APK_URL = 'https://github.com/anvarzangardauletuly-netizen/forma-app/releases/download/android-latest/FORMA.apk';
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+function appDownloadHTML() {
+  if (Native.on || IN_FRAME) return '';
+  return `<section class="card"><div class="card-h"><h3>${ic('download', 18)}Приложение FORMA</h3></div>
+    <div class="list"><a class="li pad" href="${APK_URL}" rel="noopener"><div class="grow"><b>Скачать для Android</b><small class="muted">Файл FORMA.apk · откройте его на телефоне и разрешите установку. Войдите в аккаунт — данные подтянутся.</small></div>${ic('download', 18, 'dim')}</a>
+      <div class="li pad"><div class="grow"><b>iPhone</b><small class="muted">Откройте сайт в Safari → «Поделиться» → «На экран „Домой“». Версия в App Store — после публикации.</small></div></div></div></section>`;
+}
 const PWA = {
   prompt: null, standalone: false,
   init() {
@@ -151,10 +160,14 @@ const PWA = {
   canShow() {
     if (IN_FRAME || this.standalone || Native.on) return false;
     try { if (localStorage.getItem('forma:installHidden')) return false; } catch (e) { /* нет хранилища */ }
-    return !!this.prompt || /iPhone|iPad|iPod/.test(navigator.userAgent);
+    return !!this.prompt || IS_ANDROID || /iPhone|iPad|iPod/.test(navigator.userAgent);
   },
   bannerHTML() {
     if (!this.canShow()) return '';
+    if (IS_ANDROID) {
+      return `<div class="banner install fade">${ic('download', 20)}<div class="grow"><b>FORMA для Android</b><p class="muted sm">Настоящее приложение: шаги из Health Connect, напоминания, работа без интернета.</p>
+        <a class="btn primary sm mt8" href="${APK_URL}" rel="noopener">Скачать приложение</a></div><button class="icon-btn sm" data-act="pwaHide" aria-label="Скрыть">${ic('x', 16)}</button></div>`;
+    }
     const ios = !this.prompt;
     return `<div class="banner install fade">${ic('download', 20)}<div class="grow"><b>Установите FORMA как приложение</b><p class="muted sm">${ios ? 'В Safari нажмите «Поделиться» <span class="ios-share"></span> → «На экран „Домой“». Приложение откроется на весь экран и будет работать без интернета.' : 'Иконка на экране, полный экран и работа без интернета.'}</p>
       ${ios ? '' : '<button class="btn primary sm mt8" data-act="pwaInstall">Установить</button>'}</div><button class="icon-btn sm" data-act="pwaHide" aria-label="Скрыть">${ic('x', 16)}</button></div>`;

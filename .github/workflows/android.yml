@@ -1,6 +1,11 @@
-# Сборка Android-приложения FORMA. Результат — файл APK во вкладке Actions → запуск → Artifacts.
-# APK можно установить на Android-телефон для проверки (разрешите установку из неизвестных источников).
-name: Android (тестовая сборка)
+# Сборка Android-приложения FORMA при каждом обновлении main.
+# • APK для установки напрямую с сайта публикуется в релизе «android-latest»:
+#   https://github.com/anvarzangardauletuly-netizen/forma-app/releases/download/android-latest/FORMA.apk
+# • Ключ подписи берётся из секретов репозитория (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_B64 (файл .jks в base64), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS.
+#   С ключом: новые версии ставятся поверх старой, и дополнительно собирается AAB для Google Play.
+#   Без ключа: APK подписывается временным ключом — для обновления старую версию нужно удалить.
+name: Android
 
 on:
   push:
@@ -8,10 +13,19 @@ on:
     paths: ['js/**', 'css/**', 'index.html', 'data/**', 'android/**', 'capacitor.config.json', 'package.json', '.github/workflows/android.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,11 +34,44 @@ jobs:
         with: { distribution: temurin, java-version: 21, cache: gradle }
       - run: npm ci
       - run: npm run web && npx cap sync android
-      - name: Сборка APK
+      - name: Ключ подписи из секретов
+        id: key
+        env: { KS: '${{ secrets.ANDROID_KEYSTORE_B64 }}' }
+        run: |
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"; echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"; fi
+      - name: Сборка APK (для установки с сайта)
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
+        env:
+          RELEASE_KEYSTORE: ${{ steps.key.outputs.path }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+      - name: APK → FORMA.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk FORMA.apk
+      - name: Публикация на странице релиза
+        uses: softprops/action-gh-release@v2
         with:
-          name: FORMA-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+          tag_name: android-latest
+          name: FORMA для Android
+          body: |
+            Последняя версия FORMA для Android (сборка ${{ github.run_number }}).
+            Скачайте FORMA.apk на телефоне и откройте файл. Если Android спросит — разрешите установку из этого источника.
+            Данные хранятся в аккаунте FORMA — войдите, и всё появится.
+          files: FORMA.apk
+          make_latest: true
+          overwrite_files: true
+      - uses: actions/upload-artifact@v4
+        with: { name: FORMA-android-apk, path: FORMA.apk, retention-days: 14 }
+
+      # ---- Google Play: AAB (только с постоянным ключом из секретов) ----
+      - name: Сборка AAB для Google Play
+        if: steps.key.outputs.path != ''
+        working-directory: android
+        env:
+          RELEASE_KEYSTORE: ${{ steps.key.outputs.path }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: ./gradlew bundleRelease --no-daemon
+      - if: steps.key.outputs.path != ''
+        uses: actions/upload-artifact@v4
+        with: { name: FORMA-google-play-aab, path: android/app/build/outputs/bundle/release/app-release.aab, retention-days: 30 }

@@ -542,3 +542,10 @@ details > summary::before { content: "▸ "; color: var(--muted); } details[open
 @media (max-width: 420px) { .prem-table .ph, .prem-table .pr { grid-template-columns: 1fr 72px 86px; } .prem-table .pr span { font-size: 13px; } }
 .lang-seg { margin: 4px 0 4px; }
 .onb-card .lang-seg { margin: 12px 0 4px; }
+/* Оплата переводом */
+.pay-steps { margin: 0; padding-left: 20px; display: grid; gap: 14px; }
+.pay-steps li { line-height: 1.45; }
+.pay-copy { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--card2); border: 1px solid var(--line); }
+.pay-copy b { font-size: 18px; letter-spacing: .5px; }
+.pay-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pay-req { display: grid; gap: 4px; }

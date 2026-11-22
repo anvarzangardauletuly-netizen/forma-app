@@ -30,7 +30,7 @@ const I18N = {
     document.documentElement.lang = this.lang;
     if (this.lang === 'ru') return;
     try {
-      const r = await fetch('data/i18n.json?v=5');
+      const r = await fetch('data/i18n.json?v=6');
       this.dict = await r.json();
     } catch (e) { this.dict = null; return; }
     this.buildPhrases();

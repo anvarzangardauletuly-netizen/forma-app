@@ -281,6 +281,7 @@ PAGES.admin = {
   render() {
     if (!Supa.isAdmin) return emptyState('user', 'Нет доступа', 'Этот раздел доступен только создателю приложения.');
     return `<div class="pagehead"><div><h1>Пользователи</h1><p class="muted">Данные тех, кто дал согласие при регистрации. Только чтение.</p></div><button class="btn" data-act="adminLoad">${ic('timer', 16)}Обновить</button></div>
+      <section class="card"><div class="card-h"><h3>${ic('spark', 18)}Оплаты Premium</h3><button class="link-btn" data-act="adminPaySettings">${ic('edit', 14)} Реквизиты</button></div><div id="adminPay"><div class="loading">${ic('spark', 20)}Загружаю…</div></div></section>
       <section class="card"><div class="card-h"><h3>${ic('chart', 18)}Статистика</h3></div><div id="adminStats"><div class="loading">${ic('chart', 20)}Считаю…</div></div></section>
       <section class="card flush"><div id="adminList"><div class="loading" style="padding:20px">${ic('db', 20)}Загружаю…</div></div></section>`;
   },
@@ -288,6 +289,7 @@ PAGES.admin = {
 };
 ACT.adminLoad = async () => {
   const el = $('#adminList'); if (!el) return;
+  adminPayLoad();
   Premium.call('admin-stats').then((s) => {
     App.adminPrem = s.premiumMap || {}; const box = $('#adminStats'); if (!box) return;
     box.innerHTML = `<div class="kpis k3"><div><span class="muted">Пользователей</span><b>${fmt(s.users)}</b></div><div><span class="muted">Новых за 7 дней</span><b>${fmt(s.new7)}</b></div><div><span class="muted">Активны сегодня</span><b>${fmt(s.active1)}</b></div>
@@ -301,6 +303,49 @@ ACT.adminLoad = async () => {
       : emptyState('user', 'Пока никого', 'Пользователи появятся после регистрации.');
   } catch (e) { el.innerHTML = `<div class="banner warn" style="margin:12px">Ошибка загрузки: ${esc(e.message || e)}</div>`; }
 };
+/* ---------- Оплаты переводом: подтверждение заявок и реквизиты ---------- */
+async function adminPayLoad() {
+  const box = $('#adminPay'); if (!box) return;
+  try {
+    const r = await Premium.call('admin-pay-list'); App.adminPay = r; const S = r.settings || {};
+    const row = (q, act) => `<div class="li pad pay-req"><div class="grow"><b>${esc(q.code)} · ${fmt(q.amount)} ₸ · ${q.plan === 'year' ? 'год' : 'месяц'}</b>
+        <small class="muted">${esc(q.email || q.user_id)}${q.payer ? ' · отправитель: ' + esc(q.payer) : ''} · ${new Date(q.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
+        ${act ? `<div class="row gap8"><button class="btn sm primary" data-act="adminPayDecide" data-id="${q.id}" data-ok="1">Пришло</button><button class="btn sm ghost" data-act="adminPayDecide" data-id="${q.id}" data-ok="0">Нет</button></div>`
+          : `<span class="muted sm">${q.status === 'approved' ? '✓ подтверждена' : q.status === 'rejected' ? 'отклонена' : 'отменена'}</span>`}</div>`;
+    box.innerHTML = `${!S.enabled || !(S.phone || S.link) ? `<div class="banner warn">${ic('info', 18)}<div><b>Оплата выключена.</b> Нажмите «Реквизиты», впишите номер Kaspi, на который будут приходить деньги, и включите оплату.</div></div>`
+        : `<p class="muted sm">Деньги приходят на ${esc(S.method)} ${esc(S.phone || '')}${S.name ? ' (' + esc(S.name) + ')' : ''}. Цены: ${fmt(S.month)} ₸ / мес, ${fmt(S.year)} ₸ / год.</p>`}
+      <div class="kpis k3 mt12"><div><span class="muted">Ждут проверки</span><b>${(r.pending || []).length}</b></div><div class="acc"><span>Получено всего</span><b>${fmt(r.total || 0)} ₸</b></div></div>
+      ${(r.pending || []).length ? `<p class="muted sm mt12">Откройте ${esc(S.method || 'Kaspi')} и найдите перевод с этим кодом в комментарии (или от этого отправителя). Пришло — нажмите «Пришло», Premium включится сам.</p><div class="list">${r.pending.map((q) => row(q, true)).join('')}</div>` : '<p class="muted mt12">Новых заявок нет.</p>'}
+      ${(r.recent || []).length ? `<details class="mt12"><summary>История</summary><div class="list">${r.recent.map((q) => row(q, false)).join('')}</div></details>` : ''}`;
+  } catch (e) { box.innerHTML = `<p class="muted">Не удалось загрузить: ${esc(Premium.errText(e))}</p>`; }
+}
+ACT.adminPayDecide = async (el) => {
+  const ok = el.dataset.ok === '1';
+  if (!ok && !(await confirmDlg('Отклонить заявку? Пользователь увидит, что оплата не найдена.', 'Отклонить'))) return;
+  el.disabled = true;
+  try { await Premium.call('admin-pay-decide', { id: +el.dataset.id, approve: ok }); toast(ok ? 'Premium включён пользователю' : 'Заявка отклонена'); adminPayLoad(); }
+  catch (e) { toast(Premium.errText(e), 'err'); el.disabled = false; }
+};
+ACT.adminPaySettings = () => {
+  const S = (App.adminPay && App.adminPay.settings) || { method: 'Kaspi', month: 1290, year: 7990 };
+  const s = Sheet.open({ title: 'Реквизиты для оплаты', body: `<form class="form" data-k="f">
+      <label class="switch"><input type="checkbox" name="enabled" ${S.enabled ? 'checked' : ''}><span></span>Принимать оплату переводом</label>
+      <div class="f2"><label>Способ<input class="input" name="method" value="${esc(S.method || 'Kaspi')}" maxlength="30"></label><label>Номер телефона / карты<input class="input" name="phone" value="${esc(S.phone || '')}" maxlength="30" inputmode="tel" placeholder="+7 7xx xxx xx xx"></label></div>
+      <label>Имя получателя <small class="muted">— как его увидит покупатель в Kaspi</small><input class="input" name="name" value="${esc(S.name || '')}" maxlength="60" placeholder="например, Айгуль Ж."></label>
+      <label>Ссылка на оплату <small class="muted">— необязательно (Kaspi Pay / QR-ссылка, начинается с https://)</small><input class="input" name="link" value="${esc(S.link || '')}" maxlength="300" inputmode="url"></label>
+      <div class="f2"><label>Цена за месяц, ₸<input class="input" name="month" value="${S.month || 1290}" inputmode="numeric"></label><label>Цена за год, ₸<input class="input" name="year" value="${S.year || 7990}" inputmode="numeric"></label></div>
+      <label>Заметка для покупателя <small class="muted">— необязательно</small><input class="input" name="note" value="${esc(S.note || '')}" maxlength="300"></label>
+      <p class="muted sm">Номер и имя видят только вошедшие пользователи на экране оплаты. Деньги приходят напрямую на этот счёт.</p>
+      <button class="btn primary block">Сохранить</button></form>` });
+  const f = s.querySelector('[data-k=f]');
+  f.onsubmit = async (e) => {
+    e.preventDefault(); const v = (n) => f[n].value.trim();
+    if (f.enabled.checked && !v('phone') && !v('link')) { markInvalid(f.phone, 'Укажите номер или ссылку'); return; }
+    try { await Premium.call('admin-pay-settings', { enabled: f.enabled.checked, method: v('method'), phone: v('phone'), name: v('name'), link: v('link'), note: v('note'), month: +v('month'), year: +v('year') }); Sheet.close(); toast('Сохранено'); adminPayLoad(); Premium.loadPay(true); }
+    catch (err) { toast(Premium.errText(err), 'err'); }
+  };
+};
+
 ACT.adminUser = async (el) => {
   const s = Sheet.open({ title: el.dataset.email || 'Пользователь', wide: true, body: `<div class="loading">${ic('db', 20)}Загружаю данные…</div>` });
   try {

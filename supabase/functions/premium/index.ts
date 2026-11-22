@@ -1,4 +1,4 @@
-// FORMA — «premium»: статус подписки, пробный период, промокоды, покупки в приложении, админ-инструменты.
+// FORMA — «premium»: статус подписки, пробный период, промокоды, покупки в приложении, оплата переводом, админ-инструменты.
 // Статус хранится в auth.users.app_metadata (premium_until, premium_src, trial_used) — пользователь не может изменить его сам.
 //
 // Действия (POST JSON { action, ... }, заголовок Authorization: Bearer <JWT пользователя>):
@@ -6,9 +6,15 @@
 //   trial                       — 7 дней бесплатно (один раз на аккаунт)
 //   redeem   { code }           — промокод
 //   rc-sync                     — проверить покупку в App Store / Google Play через RevenueCat (нужен секрет REVENUECAT_SECRET)
-//   checkout { plan }           — оплата на сайте (провайдер подключается позже: Kaspi / CloudPayments / ioka)
+//   checkout { plan }           — оплата картой на сайте (провайдер подключается позже)
 //   admin-grant { user_id, days }  — только для админа (таблица public.admins)
 //   admin-stats                 — только для админа: пользователи, активные, Premium
+//   pay-info                    — реквизиты для оплаты переводом (Kaspi), цены и своя заявка
+//   pay-request { plan, payer } — «Я оплатил»: заявка, которую админ подтверждает
+//   pay-cancel                  — отменить свою заявку
+//   admin-pay-list              — заявки и настройки оплаты (админ)
+//   admin-pay-decide { id, approve } — подтвердить (включает Premium) или отклонить (админ)
+//   admin-pay-settings { ... }  — реквизиты и цены (админ)
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const TRIAL_DAYS = 7;
@@ -22,6 +28,9 @@ const PROMO: Record<string, { days: number; until?: string }> = {
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 const DAY = 864e5;
+const PLAN_DAYS: Record<string, number> = { month: 30, year: 365 };
+const PAY_DEFAULT = { enabled: false, method: "Kaspi", phone: "", name: "", link: "", note: "", month: 1290, year: 7990, currency: "KZT" };
+const clean = (v: unknown, max = 120) => String(v ?? "").replace(/[\u0000-\u001f<>]/g, " ").trim().slice(0, max);
 
 function statusOf(meta: Record<string, unknown>) {
   const until = typeof meta.premium_until === "string" ? meta.premium_until : null;
@@ -82,6 +91,88 @@ Deno.serve(async (req) => {
         const { error } = await db.auth.admin.updateUserById(user.id, { app_metadata: next }); if (error) throw error; Object.assign(meta, next);
       }
       return json({ ok: true, ...statusOf(meta) });
+    }
+
+    // ---------- Оплата переводом: заявка → подтверждение админом ----------
+    const paySettings = async () => {
+      const { data } = await db.from("app_settings").select("value").eq("key", "pay").maybeSingle();
+      return { ...PAY_DEFAULT, ...((data?.value as Record<string, unknown>) || {}) } as typeof PAY_DEFAULT;
+    };
+    const publicPay = (p: typeof PAY_DEFAULT) => ({ enabled: !!p.enabled && !!(p.phone || p.link), method: p.method, phone: p.phone, name: p.name, link: p.link, note: p.note, month: p.month, year: p.year, currency: p.currency });
+    const myPending = async () => {
+      const { data } = await db.from("pay_requests").select("id, plan, amount, currency, code, status, created_at, decided_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
+      return (data && data[0]) || null;
+    };
+
+    // Код для комментария к переводу — постоянный для пользователя, чтобы его можно было указать заранее
+    const payCode = "F" + String(10000 + (parseInt(user.id.replace(/-/g, "").slice(0, 8), 16) % 90000));
+
+    if (action === "pay-info") {
+      const p = await paySettings();
+      return json({ ok: true, pay: publicPay(p), code: payCode, request: await myPending(), ...statusOf(meta) });
+    }
+
+    if (action === "pay-request") {
+      const p = await paySettings(); const pub = publicPay(p);
+      if (!pub.enabled) return json({ error: "not_configured" }, 503);
+      const plan = String(body.plan || "");
+      if (!PLAN_DAYS[plan]) return json({ error: "bad_request" }, 400);
+      const last = await myPending();
+      if (last && last.status === "pending") return json({ ok: true, request: last, pay: pub });
+      const { count } = await db.from("pay_requests").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", new Date(Date.now() - DAY).toISOString());
+      if ((count || 0) >= 5) return json({ error: "too_many" }, 429);
+      const code = payCode;
+      const { data, error } = await db.from("pay_requests").insert({ user_id: user.id, email: user.email || null, plan, amount: plan === "year" ? p.year : p.month, currency: p.currency, code, payer: clean(body.payer, 80) || null })
+        .select("id, plan, amount, currency, code, status, created_at, decided_at").single();
+      if (error) throw error;
+      return json({ ok: true, request: data, pay: pub });
+    }
+
+    if (action === "pay-cancel") {
+      await db.from("pay_requests").update({ status: "cancelled", decided_at: new Date().toISOString() }).eq("user_id", user.id).eq("status", "pending");
+      return json({ ok: true, request: await myPending() });
+    }
+
+    if (action === "admin-pay-list") {
+      if (!(await isAdmin())) return json({ error: "forbidden" }, 403);
+      const { data: pending } = await db.from("pay_requests").select("*").eq("status", "pending").order("created_at", { ascending: true }).limit(100);
+      const { data: recent } = await db.from("pay_requests").select("*").neq("status", "pending").order("decided_at", { ascending: false }).limit(20);
+      const { data: sum } = await db.from("pay_requests").select("amount, currency").eq("status", "approved");
+      const total = (sum || []).reduce((a, r) => a + (r.currency === "KZT" ? Number(r.amount) || 0 : 0), 0);
+      return json({ ok: true, pending: pending || [], recent: recent || [], total, settings: await paySettings() });
+    }
+
+    if (action === "admin-pay-decide") {
+      if (!(await isAdmin())) return json({ error: "forbidden" }, 403);
+      const id = Number(body.id); const approve = body.approve === true;
+      const { data: r } = await db.from("pay_requests").select("*").eq("id", id).maybeSingle();
+      if (!r) return json({ error: "not_found" }, 404);
+      if (r.status !== "pending") return json({ error: "already", request: r }, 409);
+      // Сначала «забираем» заявку (только если она ещё pending) — двойное нажатие не продлит Premium дважды
+      const { data: upd } = await db.from("pay_requests").update({ status: approve ? "approved" : "rejected", decided_at: new Date().toISOString() }).eq("id", id).eq("status", "pending").select("*").maybeSingle();
+      if (!upd) return json({ error: "already" }, 409);
+      if (approve) {
+        try {
+          const { data: t, error: e1 } = await db.auth.admin.getUserById(r.user_id); if (e1 || !t?.user) throw e1 || new Error("user not found");
+          const m = { ...(t.user.app_metadata || {}) } as Record<string, unknown>;
+          const base = Math.max(Date.now(), Date.parse(String(m.premium_until || 0)) || 0);
+          const next = { ...m, premium_until: new Date(base + (PLAN_DAYS[r.plan] || 30) * DAY).toISOString(), premium_src: "pay" };
+          const { error: e2 } = await db.auth.admin.updateUserById(r.user_id, { app_metadata: next }); if (e2) throw e2;
+        } catch (e) {
+          await db.from("pay_requests").update({ status: "pending", decided_at: null }).eq("id", id);
+          throw e;
+        }
+      }
+      return json({ ok: true, request: upd });
+    }
+
+    if (action === "admin-pay-settings") {
+      if (!(await isAdmin())) return json({ error: "forbidden" }, 403);
+      const num = (v: unknown, d: number) => { const n = Math.round(Number(v)); return n > 0 && n < 10_000_000 ? n : d; };
+      const cur = await paySettings();
+      const value = { enabled: body.enabled === true, method: clean(body.method, 30) || "Kaspi", phone: clean(body.phone, 30), name: clean(body.name, 60), link: /^https:\/\//.test(String(body.link || "")) ? clean(body.link, 300) : "", note: clean(body.note, 300), month: num(body.month, cur.month), year: num(body.year, cur.year), currency: "KZT" };
+      const { error } = await db.from("app_settings").upsert({ key: "pay", value, updated_at: new Date().toISOString() }); if (error) throw error;
+      return json({ ok: true, settings: value });
     }
 
     if (action === "checkout") {

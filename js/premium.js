@@ -25,6 +25,7 @@ const BILLING = {
 const Premium = {
   st: { premium: false, until: null, src: null, trial_used: false },
   rcReady: false, offerings: null,
+  pay: null, payCode: '', payReq: null, // оплата переводом (Kaspi): реквизиты, код для комментария, своя заявка
   active() { return !!this.st.premium && (!this.st.until || Date.parse(this.st.until) > Date.now()); },
   signed() { return Store.backend === 'supa' && !!Supa.client && !!Supa.user; },
   fromUser(u) {
@@ -46,13 +47,34 @@ const Premium = {
     this.fromUser(Supa.user);
     try { const c = JSON.parse(localStorage.getItem(LS + 'premium:' + Store.uid) || 'null'); if (c && !this.st.until && c.until) this.st = c; } catch (e) { /* нет кэша */ }
     try { await this.call('status'); if (booted && ['premium', 'profile', 'stats'].includes(App.page) && !Sheet.stack.length) render(); } catch (e) { /* офлайн — берём из сессии */ }
+    this.loadPay();
+    if (Supa.isAdmin) this.adminPayPing();
     if (Native.on) this.rcInit();
   },
+  // Реквизиты и своя заявка на оплату переводом
+  async loadPay(force = false) {
+    if (!this.signed() || this.payBusy) return;
+    if (!force && this.payAt && Date.now() - this.payAt < 30000) return;
+    this.payBusy = true; this.payAt = Date.now();
+    try {
+      const r = await this.call('pay-info');
+      const before = this.payReq && this.payReq.status;
+      this.pay = r.pay; this.payCode = r.code || ''; this.payReq = r.request || null;
+      if (before === 'pending' && this.payReq && this.payReq.status === 'approved') toast('Оплата подтверждена — Premium включён 🎉', 'ok', 6000);
+      if (booted && App.page === 'premium' && !Sheet.stack.length) render();
+    } catch (e) { /* без оплаты переводом */ }
+    this.payBusy = false;
+  },
+  // Админу: напомнить о новых заявках на оплату
+  async adminPayPing() {
+    try { const r = await this.call('admin-pay-list'); const n = (r.pending || []).length; App.adminPay = r; if (n) toast(`Новые оплаты на проверку: ${n}. Профиль → Пользователи`, 'warn', 7000); } catch (e) { /* не админ или офлайн */ }
+  },
+  payOn() { return !!(this.pay && this.pay.enabled) && !(Native.on && Native.isIOS) && !(Native.on && (this.offerings && (this.offerings.availablePackages || []).length)); },
   errText(e) {
     const c = e && e.code;
     return ({ auth: 'Войдите в аккаунт, чтобы получить Premium.', offline: 'Нет интернета.', trial_used: 'Пробный период уже был использован на этом аккаунте.',
       bad_code: 'Такого промокода нет или он закончился.', code_used: 'Этот промокод вы уже активировали.', not_configured: 'Оплата ещё не подключена.',
-      rc_failed: 'Магазин не ответил — попробуйте позже.' })[c] || 'Не получилось. Попробуйте позже.';
+      rc_failed: 'Магазин не ответил — попробуйте позже.', too_many: 'Слишком много заявок за сутки. Попробуйте завтра.' })[c] || 'Не получилось. Попробуйте позже.';
   },
 
   /* ---------- Покупки в приложении (RevenueCat) ---------- */
@@ -103,13 +125,24 @@ function regionPrices() { return BILLING.regions[billingRegion()] || BILLING.reg
 
 PAGES.premium = {
   title: 'Premium', icon: 'spark',
+  mount() { if (Premium.signed()) Premium.loadPay(); },
   render() {
     const on = Premium.active(); const st = Premium.st; const signed = Premium.signed();
     const until = st.until ? new Date(st.until).toLocaleDateString({ en: 'en-US', kk: 'kk-KZ' }[I18N.lang] || 'ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
     const src = { trial: 'пробный период', admin: 'подарок', store: 'подписка' }[st.src] || (String(st.src || '').startsWith('promo') ? 'промокод' : '');
     const RP = regionPrices();
     const pkgs = Native.on && Premium.offerings ? Premium.offerings.availablePackages || [] : [];
-    const buy = Native.on
+    const P = Premium.pay || {}; const req = Premium.payReq;
+    const kz = (v) => `${fmt(v)} ₸`;
+    const reqBox = req && req.status === 'pending'
+      ? `<div class="banner info mt12">${ic('timer', 18)}<div><b>Заявка ${esc(req.code)} на проверке</b><p class="muted sm">${req.plan === 'year' ? 'Год' : 'Месяц'} · ${kz(req.amount)}. Как только оплата придёт, Premium включится сам — обычно в течение дня.</p>
+          <button class="btn sm ghost mt8" data-act="payCancel">Отменить заявку</button></div></div>`
+      : req && req.status === 'rejected' ? `<div class="banner warn mt12">${ic('info', 18)}<div>Оплата по заявке ${esc(req.code)} не найдена. Если вы переводили деньги — напишите создателю FORMA.</div></div>` : '';
+    const buy = Premium.payOn()
+      ? `${reqBox}<div class="plans mt12"><button class="plan" data-act="payOpen" data-plan="month"><b>${kz(P.month)}</b><span>в месяц</span></button>
+         <button class="plan best" data-act="payOpen" data-plan="year"><i>−${Math.round((1 - P.year / (P.month * 12)) * 100)}%</i><b>${kz(P.year)}</b><span>в год · ${kz(Math.round(P.year / 12))}/<span>мес</span></span></button></div>
+         <p class="muted sm center mt8">Оплата переводом через ${esc(P.method || 'Kaspi')}. Без автосписаний — продлеваете сами, когда захотите.</p>`
+      : Native.on
       ? (pkgs.length ? pkgs.map((p, i) => `<button class="btn ${i === 0 ? 'primary' : ''} block mt8" data-act="premiumBuy" data-i="${i}">${esc(p.product.title || p.identifier)} — ${esc(p.product.priceString)}</button>`).join('')
         : `<div class="banner info mt12">${ic('info', 18)}<div>Покупка в приложении появится после публикации в ${Native.isIOS ? 'App Store' : 'Google Play'}. А пока — пробный период или промокод.</div></div>`)
       : `<div class="plans mt12"><button class="plan" data-act="premiumBuy" data-plan="month"><b>${priceText(RP.month)}</b><span>в месяц</span></button>
@@ -148,6 +181,33 @@ ACT.premiumBuy = async (el) => {
       <li>${ic('star', 18)}<span>Промокод — у создателя FORMA или в соцсетях приложения</span></li><li>${ic('download', 18)}<span>Покупка в приложении FORMA для iPhone и Android — после публикации в магазинах</span></li></ul>` });
   }
 };
+/* ---------- Оплата переводом (Kaspi): перевод → «Я оплатил» → создатель подтверждает ---------- */
+ACT.payOpen = (el) => {
+  const P = Premium.pay; if (!P) return; const plan = el.dataset.plan; const amount = plan === 'year' ? P.year : P.month;
+  const code = Premium.payCode;
+  const s = Sheet.open({ title: `Premium на ${plan === 'year' ? 'год' : 'месяц'} — ${fmt(amount)} ₸`, body: `
+    <ol class="pay-steps">
+      <li><b>Переведите ${fmt(amount)} ₸</b> через ${esc(P.method || 'Kaspi')}${P.phone ? ` по номеру<div class="pay-copy"><b>${esc(P.phone)}</b><button class="btn sm" data-copy="${esc(P.phone)}">Копировать</button></div>` : ''}
+        ${P.name ? `<small class="muted">Получатель: ${esc(P.name)}</small>` : ''}
+        ${P.link ? `<a class="btn block mt8" href="${esc(P.link)}" target="_blank" rel="noopener">${ic('right', 16)}Открыть оплату в ${esc(P.method || 'Kaspi')}</a>` : ''}</li>
+      <li><b>В комментарии к переводу</b> напишите код:<div class="pay-copy"><b class="pay-code">${esc(code)}</b><button class="btn sm" data-copy="${esc(code)}">Копировать</button></div><small class="muted">По коду мы узнаем, чей это перевод.</small></li>
+      <li><b>Нажмите «Я оплатил»</b> — Premium включится, как только оплата будет проверена (обычно в течение дня).</li>
+    </ol>
+    ${P.note ? `<p class="muted sm">${esc(P.note)}</p>` : ''}
+    <label class="form mt12">Имя отправителя в ${esc(P.method || 'Kaspi')} <small class="muted">— необязательно, помогает найти перевод</small><input class="input" data-k="payer" maxlength="60" placeholder="например, Анвар З."></label>`,
+    foot: `<button class="btn primary grow" data-k="paid">${ic('check', 18)}Я оплатил</button>` });
+  s.querySelectorAll('[data-copy]').forEach((b) => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Скопировано'); } catch (e) { toast('Скопируйте вручную', 'warn'); } }; });
+  s.querySelector('[data-k=paid]').onclick = async (e) => {
+    e.target.disabled = true;
+    try { const r = await Premium.call('pay-request', { plan, payer: s.querySelector('[data-k=payer]').value.trim() }); Premium.payReq = r.request; Sheet.closeAll(); render(); toast('Заявка отправлена. Premium включится после проверки оплаты.', 'ok', 6000); }
+    catch (err) { toast(Premium.errText(err), 'err'); e.target.disabled = false; }
+  };
+};
+ACT.payCancel = async () => {
+  if (!(await confirmDlg('Отменить заявку на оплату? Если вы уже перевели деньги — не отменяйте, дождитесь проверки.', 'Отменить заявку'))) return;
+  try { const r = await Premium.call('pay-cancel'); Premium.payReq = r.request; render(); } catch (e) { toast(Premium.errText(e), 'err'); }
+};
+
 ACT.premiumRestore = async () => {
   const P = Native.plugin('Purchases'); if (!P || !Premium.rcReady) { toast('Покупки в приложении пока не подключены', 'warn'); return; }
   try { await P.restorePurchases(); await Premium.call('rc-sync'); toast(Premium.active() ? 'Premium восстановлен' : 'Активных покупок не найдено'); render(); } catch (e) { toast(Premium.errText(e), 'err'); }

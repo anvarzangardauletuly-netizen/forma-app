@@ -7,8 +7,9 @@ android {
         applicationId "kz.forma.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Номер версии растёт с каждой сборкой в GitHub Actions (VERSION_CODE = номер запуска)
+        versionCode((System.getenv("VERSION_CODE") ?: "1").toInteger())
+        versionName "1.0." + (System.getenv("VERSION_CODE") ?: "0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +17,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Ключ подписи — только из секретов GitHub (ANDROID_KEYSTORE_B64 и пароль), в репозиторий не попадает.
+        // Без него сборка подписывается временным отладочным ключом.
+        if (System.getenv("RELEASE_KEYSTORE")) {
+            release {
+                storeFile file(System.getenv("RELEASE_KEYSTORE"))
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS") ?: 'forma'
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD") ?: System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig System.getenv("RELEASE_KEYSTORE") ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

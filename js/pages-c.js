@@ -489,6 +489,7 @@ PAGES.profile = {
           <label class="switch"><input type="checkbox" name="recalc" ${P.targetsManual ? '' : 'checked'}><span></span>Пересчитать цели КБЖУ по новым данным</label>
           <button class="btn primary block">Сохранить профиль</button></form>
       </section>
+      ${typeof appDownloadHTML === 'function' ? appDownloadHTML() : ''}
       <section class="card">
         <div class="card-h"><h3>${ic('flame', 18)}Мои цели</h3><a class="link" href="#calc">Калькулятор</a></div>
         <div class="kpis k3"><div><span class="muted">Калории</span><b>${fmt(T.kcal)}</b></div><div><span class="muted">Белки</span><b>${T.p} г</b></div><div><span class="muted">Жиры</span><b>${T.f} г</b></div><div><span class="muted">Углеводы</span><b>${T.c} г</b></div><div><span class="muted">Вода</span><b>${fmt(T.water)} мл</b></div><div><span class="muted">Шаги</span><b>${fmt(T.steps)}</b></div></div>
