@@ -66,7 +66,7 @@ const Scan = {
     if ('BarcodeDetector' in window) {
       try {
         const sup = await BarcodeDetector.getSupportedFormats();
-        const want = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'].filter((f) => sup.includes(f));
+        const want = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix'].filter((f) => sup.includes(f));
         if (want.length) this.detector = new BarcodeDetector({ formats: want });
       } catch (e) { /* нет поддержки */ }
     }
@@ -78,7 +78,7 @@ const Scan = {
     if (det) { try { const r = await det.detect(canvas); if (r && r.length) return r[0].rawValue; } catch (e) { /* дальше ZXing */ } }
     const Z = await this.zx();
     const hints = new Map(); hints.set(Z.DecodeHintType.TRY_HARDER, true);
-    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE]);
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.DATA_MATRIX]);
     const reader = new Z.MultiFormatReader(); reader.setHints(hints);
     try { const lum = new Z.HTMLCanvasElementLuminanceSource(canvas); return reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum))).getText(); }
     catch (e) { return null; }
@@ -109,9 +109,13 @@ const Scan = {
     }
     box.innerHTML = `<div class="viewfinder"><video playsinline muted autoplay></video><div class="vf-frame"></div><div class="vf-line"></div></div><button class="btn block mt12" data-act="scanStop">Остановить камеру</button>`;
     const v = box.querySelector('video'); v.srcObject = this.stream; await v.play().catch(() => {});
-    const c = document.createElement('canvas'); let last = 0;
+    const c = document.createElement('canvas'); let last = 0; const started = performance.now(); let hinted = false;
     const loop = async (t) => {
       if (!this.stream) return;
+      if (!hinted && t - started > 7000) {
+        hinted = true;
+        box.insertAdjacentHTML('beforeend', `<p class="muted sm mt8 center">${ic('info', 14)} Не получается? Наведите на <b>штрихкод с полосками</b> (обычно на дне или боку упаковки), держите телефон в 10–15 см, без бликов. Или нажмите «Сфотографировать штрихкод».</p>`);
+      }
       if (t - last > 280 && !this.busy && v.videoWidth) {
         last = t; this.busy = true;
         c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
@@ -132,7 +136,7 @@ const Scan = {
 PAGES.scan = {
   title: 'Сканер', icon: 'scan',
   render() {
-    const ctx = App.scanCtx; const off = BarcodeProviders[2].status;
+    const ctx = App.scanCtx; const off = (BarcodeProviders.find((p) => p.name === 'Open Food Facts') || {}).status;
     return `
     <div class="pagehead"><div><h1>Сканер штрихкодов</h1><p class="muted">${ctx ? `Добавление в «${MEALS.find((m) => m.id === ctx.meal).name}», ${fmtDate(ctx.date).toLowerCase()}` : 'Наведите камеру на штрихкод упаковки или QR-код FORMA'}</p></div></div>
     <section class="card scan-card">
@@ -147,7 +151,7 @@ PAGES.scan = {
     <div id="scanResult"></div>
     <section class="card subtle">
       <h4>Как это работает</h4>
-      <ol class="steps-list"><li>Код распознаётся прямо на устройстве (EAN-13, EAN-8, UPC, Code 128, QR).</li>
+      <ol class="steps-list"><li>Код распознаётся прямо на устройстве (EAN-13, EAN-8, UPC, Code 128, QR и квадратный код маркировки DataMatrix).</li>
       <li>Поиск: ваши продукты → база магазинов в приложении (${fmt(StoreFoods.list.length)} товаров, работает без интернета) → большая база FORMA (${fmt(typeof BIG_BASE_COUNT === "number" ? BIG_BASE_COUNT : 0)} товаров и продукты, которые добавили пользователи)${off === 'off' ? '' : ' → мировая база Open Food Facts'}.</li>
       <li>Нашёлся — укажите граммы и добавьте в дневник. Нет — создайте продукт вручную или сфотографируйте этикетку с КБЖУ, и AI заполнит форму для проверки. В следующий раз этот штрихкод найдётся сразу.</li></ol>
       ${off === 'off' ? '<p class="muted sm">Внешняя база штрихкодов недоступна из этого окна (браузер блокирует запросы к другим сайтам), поэтому поиск идёт по вашей базе продуктов.</p>' : ''}
@@ -168,13 +172,36 @@ ACT.scanFile = async (el) => {
 };
 ACT.scanManual = (f) => { const v = f.code.value.replace(/\D/g, ''); if (!/^\d{8}$|^\d{12,14}$/.test(v)) { markInvalid(f.code, 'Штрихкод — это 8, 12, 13 или 14 цифр'); return; } handleCode(v); };
 
+/* Из любого кода на упаковке достаём штрихкод товара (GTIN):
+   • обычный штрихкод — цифры как есть;
+   • код маркировки DataMatrix/QR (GS1): «01» + 14 цифр GTIN + серийный номер…;
+   • ссылка GS1 Digital Link: …/01/04870000000000/…  или ?gtin=… / ?ean=…  */
+function extractGTIN(raw) {
+  const s = String(raw || '').replace(/[\x00-\x1f]/g, '').replace(/^\]([A-Za-z]\d)/, '').trim();
+  if (/^\d{8}$|^\d{12,14}$/.test(s)) return s;
+  let m = s.match(/^\(?01\)?(\d{14})/); if (m) return m[1];
+  m = s.match(/\/01\/(\d{8,14})(?:[/?#]|$)/); if (m) return m[1];
+  m = s.match(/[?&](?:gtin|ean|barcode|code)=(\d{8,14})/i); if (m) return m[1];
+  return null;
+}
+function gtinToEan(g) { return g.length === 14 && g[0] === '0' ? g.slice(1) : g; }
+
 async function handleCode(raw) {
   const code = String(raw).trim();
   const qr = code.match(/#(food|recipe)-([A-Za-z0-9-]+)/);
   if (qr) { openDeepLink(qr[1] + '-' + qr[2]); return; }
   const out = $('#scanResult'); if (!out) return;
-  const digits = code.replace(/\D/g, '');
-  if (!digits || digits.length < 8) { out.innerHTML = `<section class="card"><div class="banner warn">Распознан код «${esc(code.slice(0, 60))}», но это не штрихкод продукта.</div></section>`; return; }
+  const gtin = extractGTIN(code);
+  if (!gtin) {
+    const url = /^https?:\/\//i.test(code) ? code : null; let host = '';
+    try { host = url ? new URL(url).hostname : ''; } catch (e) { /* не ссылка */ }
+    out.innerHTML = `<section class="card fade"><div class="banner warn">${ic('info', 18)}<div><b>${url ? 'Это QR-код со ссылкой' + (host ? ' на ' + esc(host) : '') + ', а не штрихкод товара.' : 'Это не штрихкод товара.'}</b><br>
+      В таком коде нет названия и КБЖУ продукта. Наведите камеру на <b>штрихкод с полосками</b> — обычно он на дне или боку упаковки, под ним 13 цифр. Можно вписать эти цифры вручную в поле выше.</div></div>
+      ${url ? `<p class="muted sm mt8">Распознано: <span class="mono">${esc(code.slice(0, 120))}</span></p>` : ''}
+      <button class="btn mt12" data-act="scanLive">${ic('scan', 16)}Сканировать ещё раз</button></section>`;
+    return;
+  }
+  const digits = gtinToEan(gtin);
   out.innerHTML = `<section class="card"><div class="loading">${ic('search', 20)}Ищу продукт ${esc(digits)}…</div></section>`;
   let found = null, src = '';
   for (const p of BarcodeProviders) { try { found = await p.lookup(digits); } catch (e) { found = null; } if (found) { src = p.name; break; } }
