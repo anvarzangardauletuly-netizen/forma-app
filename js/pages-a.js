@@ -355,6 +355,7 @@ function openFoodPicker(ctx) {
   draw(); setTimeout(() => { if (window.innerWidth > 700) inp.focus(); }, 120);
 }
 /* ---------- Большая база FORMA на сервере: ~500 000 товаров (Open Food Facts) + товары, добавленные пользователями ---------- */
+const BIG_BASE_COUNT = 1000000; // товаров в большой базе на сервере (off_products)
 const ServerFoods = {
   async rpc(fn, body, ms = 8000) {
     const r = await withTimeout(fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: SUPA_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), ms);
@@ -409,13 +410,13 @@ const OnlineFoods = {
     clearTimeout(this.timer); const my = ++this.seq;
     if (!q || norm(q).length < 3 || /^\d+$/.test(q.trim()) || !this.available()) return;
     const box = document.createElement('div'); box.className = 'online-res';
-    box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база · 500 000 товаров</div><p class="muted sm online-st">Ищу…</p>`;
+    box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база FORMA · ${fmt(BIG_BASE_COUNT)} товаров</div><p class="muted sm online-st">Ищу…</p>`;
     res.appendChild(box);
     this.timer = setTimeout(async () => {
       try {
         const list = await this.search(q); if (my !== this.seq || !box.isConnected) return;
         list.forEach((f) => online.set(f.id, f));
-        box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база · 500 000 товаров</div>` + (list.length ? list.map((f) => foodRowHTML(f)).join('') + '<p class="muted sm online-st">Данные открытой базы — сверьте с упаковкой. Выбранный продукт сохранится у вас и будет доступен без интернета.</p>' : '<p class="muted sm online-st">В интернете тоже ничего. Попробуйте другое название или создайте продукт.</p>');
+        box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база FORMA · ${fmt(BIG_BASE_COUNT)} товаров</div>` + (list.length ? list.map((f) => foodRowHTML(f)).join('') + '<p class="muted sm online-st">Данные открытой базы — сверьте с упаковкой. Выбранный продукт сохранится у вас и будет доступен без интернета.</p>' : '<p class="muted sm online-st">В интернете тоже ничего. Попробуйте другое название или создайте продукт.</p>');
       } catch (e) {
         if (my !== this.seq || !box.isConnected) return;
         box.querySelector('.online-st').textContent = e && e.code === 'rate' ? 'Слишком много поисков подряд — подождите минуту.' : 'Онлайн-база сейчас не отвечает. Попробуйте позже.';
@@ -693,14 +694,14 @@ PAGES.foods = {
   render() {
     const cats = ['all', 'custom', 'recipe', ...Object.keys(FOOD_CATS).filter((k) => k !== 'custom' && k !== 'recipe' && (k !== 'store' || StoreFoods.list.length))];
     return `
-    <div class="pagehead"><div><h1>База продуктов</h1><p class="muted">${fmt(BASE_FOODS.length + StoreFoods.list.length)} продуктов${StoreFoods.list.length ? ` (из них ${fmt(StoreFoods.list.length)} магазинных товаров со штрихкодами)` : ''} · ${Object.keys(D.foods).length} моих · ${Object.keys(D.recipes).length} блюд. Значения — на 100 г.</p></div>
+    <div class="pagehead"><div><h1>База продуктов</h1><p class="muted"><b>${fmt(BIG_BASE_COUNT + BASE_FOODS.length + StoreFoods.list.length)} продуктов</b>: ${fmt(BASE_FOODS.length + StoreFoods.list.length)} в приложении (работают без интернета) + ${fmt(BIG_BASE_COUNT)} в большой базе FORMA (ищутся через интернет) · ${Object.keys(D.foods).length} моих · ${Object.keys(D.recipes).length} блюд. Значения — на 100 г.</p></div>
       <div class="row gap8"><button class="btn" data-act="go" data-p="scan">${ic('scan', 18)}Сканер</button><button class="btn primary" data-act="foodNew">${ic('plus', 18)}Новый продукт</button></div></div>
     <div class="search big"><span>${ic('search', 20)}</span><input class="input" type="search" placeholder="Поиск по всей базе: название, производитель или штрихкод" value="${esc(App.foodQ)}" data-in="foodSearch" id="foodQ"></div>
     <div class="chips scroll">${cats.map((c) => `<button class="chip ${App.foodCat === c ? 'on' : ''}" data-act="foodCat" data-c="${c}">${c === 'all' ? 'Все' : FOOD_CATS[c]}</button>`).join('')}</div>
-    <div class="card flush"><div id="foodList"></div></div>
+    <div class="card flush"><div id="foodList"></div><div id="foodOnline"></div></div>
     ${StoreFoods.list.length ? '<p class="muted sm mt8">Магазинные товары — из открытой базы <a href="https://openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (лицензия ODbL). Данные вносят покупатели — сверяйте с упаковкой.</p>' : ''}`;
   },
-  mount() { drawFoodList(); },
+  mount() { drawFoodList(); drawFoodOnline(); },
 };
 function drawFoodList() {
   const el = $('#foodList'); if (!el) return;
@@ -714,7 +715,20 @@ function drawFoodList() {
     </div>`).join('')}</div>${list.length > shown.length ? `<button class="btn block ghost" data-act="foodMore">Показать ещё (${list.length - shown.length})</button>` : ''}`
     : emptyState('search', 'Ничего не найдено', 'Попробуйте другое название или создайте продукт.', `<button class="btn" data-act="foodNew">Создать продукт</button>`);
 }
-ACT.foodSearch = (el) => { App.foodQ = el.value; App.foodLimit = 80; drawFoodList(); };
+ACT.foodSearch = (el) => { App.foodQ = el.value; App.foodLimit = 80; drawFoodList(); drawFoodOnline(); };
+/* Страница «База продуктов»: под своими результатами — большая база FORMA (500 000+ товаров) */
+const foodOnlineMap = new Map();
+function drawFoodOnline() {
+  const box = $('#foodOnline'); if (!box) return; box.innerHTML = '';
+  const q = (App.foodQ || '').trim(); if (q.length < 3) return;
+  OnlineFoods.attach(box, q, foodOnlineMap);
+  box.onclick = (e) => {
+    const row = e.target.closest('[data-food]'); if (!row) return;
+    const f = foodOnlineMap.get(row.dataset.food); if (!f) return;
+    const saved = saveExternalFood(f);
+    openAmount(saved, { date: App.diaryDate || todayISO(), meal: autoMeal() });
+  };
+}
 ACT.foodCat = (el) => { App.foodCat = el.dataset.c; App.foodLimit = 80; render(); };
 ACT.foodMore = () => { App.foodLimit += 120; drawFoodList(); };
 ACT.foodNew = () => openFoodForm({});

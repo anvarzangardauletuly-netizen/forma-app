@@ -15,6 +15,10 @@ from import_off_dump import URL, UA, COUNTRIES, CYR, num, clean  # noqa: E402
 LIMIT = int(os.environ.get("LIMIT") or 500_000)
 OUT_DIR = os.environ.get("OUT_DIR") or "/tmp/off-server"
 PART = 5000
+# Префиксы штрихкодов GS1 (страна, выдавшая код)
+KZ_PREFIX = ("487",)
+CIS_PREFIXES = tuple(str(x) for x in range(460, 470)) + ("481", "482", "470", "478", "476", "484", "485", "486", "488", "474", "475", "477")
+IMPORT_PREFIXES = ("868", "869") + tuple(str(x) for x in range(690, 700)) + ("880", "626", "400", "401", "402", "403", "404", "405", "406", "407", "408", "409", "410", "411", "412", "413", "414", "415", "416", "417", "418", "419", "420", "421", "422", "423", "424", "425", "426", "427", "428", "429", "440", "590", "594", "599", "858", "859", "800", "801", "802", "803", "804", "805", "806", "807", "808", "809", "810", "811", "812", "813", "814", "815", "816", "817", "818", "819", "820", "821", "822", "823", "824", "825", "826", "827", "828", "829", "830", "831", "832", "833", "834", "835", "836", "837", "838", "839", "529", "520", "521", "759", "750", "754", "755", "780", "784", "896", "890", "899", "885", "893", "955", "958", "950", "471", "489", "729", "622", "628", "629", "460")
 READABLE = re.compile(r"[a-zа-яёәіңғүұқөһ]", re.I)
 csv.field_size_limit(10 ** 8)
 
@@ -54,14 +58,15 @@ def convert(r):
     serv = round(serv) if serv and 1 <= serv <= 2000 else 100
     tags = r.get("countries_tags") or ""
     scans = int(num(r.get("unique_scans_n")) or 0)
-    kz = "en:kazakhstan" in tags
-    cis = kz or any(c in tags for c in COUNTRIES) or bool(CYR.search(name))
-    # приоритет: Казахстан, затем СНГ/русские названия, затем популярность
-    score = (2 if kz else 1 if cis else 0, scans)
+    kz = "en:kazakhstan" in tags or code.startswith(KZ_PREFIX)
+    cis = kz or any(c in tags for c in COUNTRIES) or bool(CYR.search(name)) or code.startswith(CIS_PREFIXES)
+    imp = code.startswith(IMPORT_PREFIXES)
+    # приоритет: Казахстан → СНГ/русские названия → страны, откуда везут товары в Казахстан → популярность в мире
+    score = (3 if kz else 2 if cis else 1 if imp else 0, scans)
     rr = lambda x: round(x, 1)
     row = {"code": code, "name": name, "brand": brand, "kcal": rr(kcal), "p": rr(pr), "f": rr(fa), "c": rr(ca),
            "fib": rr(fib), "sug": rr(sug), "salt": rr(salt), "portion": serv, "scans": scans + (100000 if kz else 0),
-           "cc": "kz" if kz else ("cis" if cis else "")}
+           "cc": "kz" if kz else ("cis" if cis else ("imp" if imp else ""))}
     return score, row
 
 

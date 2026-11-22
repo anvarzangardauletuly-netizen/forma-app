@@ -14,6 +14,7 @@ KEY = re.search(r"SUPA_KEY = '([^']+)'", SRC).group(1)
 OUT_DIR = os.environ.get("OUT_DIR") or "/tmp/off-server"
 TOKEN = os.environ["SEED_TOKEN"]
 START = int(os.environ.get("START") or 0)
+SKIP_DIR = os.environ.get("SKIP_DIR")  # части прошлой загрузки: эти штрихкоды уже на сервере
 
 
 def post(rows):
@@ -26,11 +27,18 @@ def post(rows):
 
 def main():
     parts = sorted(glob.glob(os.path.join(OUT_DIR, "part-*.json")))
+    skip = set()
+    if SKIP_DIR:
+        for p in glob.glob(os.path.join(SKIP_DIR, "part-*.json")):
+            skip.update(r["code"] for r in json.load(open(p, encoding="utf-8")))
+        print(f"уже на сервере: {len(skip):,}", file=sys.stderr, flush=True)
     total = 0
     for i, path in enumerate(parts):
         if i < START:
             continue
-        rows = json.load(open(path, encoding="utf-8"))
+        rows = [r for r in json.load(open(path, encoding="utf-8")) if r["code"] not in skip]
+        if not rows:
+            continue
         for attempt in range(4):
             try:
                 total += int(post(rows)); break
