@@ -19,6 +19,15 @@ const BarcodeProviders = [
     async lookup(code) { return StoreFoods.findCode(code); },
   },
   {
+    // Большая база FORMA на сервере: ~500 000 товаров + товары, которые добавили сами пользователи
+    name: 'База FORMA', status: 'ok',
+    async lookup(code) {
+      if (navigator.onLine === false) { this.offline = true; return null; }
+      this.offline = false;
+      try { return await ServerFoods.byCode(code); } catch (e) { return null; }
+    },
+  },
+  {
     // Open Food Facts — открытая мировая база штрихкодов. Работает там, где странице разрешены внешние запросы.
     // В окне claude.ai политика безопасности блокирует запросы к другим сайтам — тогда провайдер помечается недоступным.
     name: 'Open Food Facts', status: 'unknown',
@@ -37,7 +46,7 @@ const BarcodeProviders = [
         return { id: 'off_' + code, name: p.product_name_ru || p.product_name || 'Продукт ' + code, brand: (p.brands || '').split(',')[0].trim(), cat: 'custom', barcode: code,
           per: { kcal: r1(kcal), p: r1(n.proteins_100g || 0), f: r1(n.fat_100g || 0), c: r1(n.carbohydrates_100g || 0), fib: r1(n.fiber_100g || 0), sug: r1(n.sugars_100g || 0), salt: r1(n.salt_100g || 0) },
           portion: { g: +p.serving_quantity || 100, label: 'порция' }, external: 'Open Food Facts' };
-      } catch (e) { this.status = 'off'; return null; }
+      } catch (e) { if (IN_FRAME) this.status = 'off'; return null; } // сбой сети — в следующий раз попробуем снова
     },
   },
 ];
@@ -139,7 +148,7 @@ PAGES.scan = {
     <section class="card subtle">
       <h4>Как это работает</h4>
       <ol class="steps-list"><li>Код распознаётся прямо на устройстве (EAN-13, EAN-8, UPC, Code 128, QR).</li>
-      <li>Поиск: ваши продукты → база магазинов в приложении (${fmt(StoreFoods.list.length)} товаров, работает без интернета)${off === 'off' ? '' : ' → открытая база Open Food Facts в интернете'}.</li>
+      <li>Поиск: ваши продукты → база магазинов в приложении (${fmt(StoreFoods.list.length)} товаров, работает без интернета) → большая база FORMA (500 000 товаров и продукты, которые добавили пользователи)${off === 'off' ? '' : ' → мировая база Open Food Facts'}.</li>
       <li>Нашёлся — укажите граммы и добавьте в дневник. Нет — создайте продукт вручную или сфотографируйте этикетку с КБЖУ, и AI заполнит форму для проверки. В следующий раз этот штрихкод найдётся сразу.</li></ol>
       ${off === 'off' ? '<p class="muted sm">Внешняя база штрихкодов недоступна из этого окна (браузер блокирует запросы к другим сайтам), поэтому поиск идёт по вашей базе продуктов.</p>' : ''}
     </section>`;
@@ -198,7 +207,7 @@ async function handleCode(raw) {
     };
   } else {
     out.innerHTML = `<section class="card fade"><div class="row between"><span class="tag warn">Не найдено</span><code class="mono sm">${esc(digits)}</code></div>
-      <h3 class="mt8">Этого продукта ещё нет в базе</h3><p class="muted">Добавьте его один раз — дальше штрихкод будет находиться мгновенно.</p>${checksum}${navigator.onLine === false ? '<div class="banner warn">Нет интернета — онлайн-база штрихкодов сейчас недоступна. Создайте продукт вручную или отсканируйте позже.</div>' : ''}
+      <h3 class="mt8">Этого продукта ещё нет ни в одной базе</h3><p class="muted">Добавьте его один раз — перепишите КБЖУ с упаковки (таблица «Пищевая ценность на 100 г»).${typeof Supa !== 'undefined' && Supa.user ? ' Продукт сразу появится у всех пользователей FORMA — следующему не придётся вводить.' : ' Войдите в аккаунт — и добавленный продукт будет находиться у всех пользователей FORMA.'}</p>${checksum}${navigator.onLine === false ? '<div class="banner warn">Нет интернета — онлайн-база штрихкодов сейчас недоступна. Создайте продукт вручную или отсканируйте позже.</div>' : ''}
       <div class="row gap8 wrap mt12"><button class="btn primary" data-act="scanCreate" data-code="${digits}">${ic('edit', 16)}Создать вручную</button>
       ${AI.photo ? `<label class="btn">${ic('camera', 16)}Сфотографировать этикетку (AI)<input type="file" accept="image/*" capture="environment" data-ch="labelPhoto" data-code="${digits}" hidden></label>` : ''}</div></section>`;
   }

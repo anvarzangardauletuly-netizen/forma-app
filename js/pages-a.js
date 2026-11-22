@@ -354,37 +354,73 @@ function openFoodPicker(ctx) {
   on('create', () => openFoodForm({ name: q, afterSave: (f) => openAmount(customAsFood(f), ctx) }));
   draw(); setTimeout(() => { if (window.innerWidth > 700) inp.focus(); }, 120);
 }
-/* ---------- Поиск в мировой базе Open Food Facts (миллионы товаров со штрихкодами) ---------- */
+/* ---------- Большая база FORMA на сервере: ~500 000 товаров (Open Food Facts) + товары, добавленные пользователями ---------- */
+const ServerFoods = {
+  async rpc(fn, body, ms = 8000) {
+    const r = await withTimeout(fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: SUPA_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), ms);
+    if (!r.ok) throw { code: 'http', status: r.status };
+    return r.json();
+  },
+  toFood(x) {
+    const shared = x.src === 'community';
+    return { id: (shared ? 'cf_' : 'off_') + x.code, name: x.name, brand: x.brand || '', cat: 'custom', barcode: x.code,
+      per: { kcal: r1(+x.kcal || 0), p: r1(+x.p || 0), f: r1(+x.f || 0), c: r1(+x.c || 0), fib: r1(+x.fib || 0), sug: r1(+x.sug || 0), salt: r1(+x.salt || 0) },
+      portion: { g: +x.portion || 100, label: 'порция' }, external: shared ? 'База FORMA (добавили пользователи)' : 'Open Food Facts' };
+  },
+  async search(q) { const r = await this.rpc('search_products', { q, lim: 30 }); return (r || []).map((x) => this.toFood(x)); },
+  async byCode(code) { const r = await this.rpc('product_by_code', { code }); return r && r[0] ? this.toFood(r[0]) : null; },
+  // Продукт со штрихкодом, который пользователь создал сам, — делимся со всеми (только для вошедших)
+  async share(rec) {
+    try {
+      if (!rec || !/^\d{8,14}$/.test(rec.barcode || '') || typeof Supa === 'undefined' || !Supa.client || !Supa.user) return;
+      const p = rec.per || {}; const cl = (v, hi) => Math.max(0, Math.min(hi, +v || 0));
+      await Supa.client.from('community_foods').upsert({ code: rec.barcode, name: String(rec.name).slice(0, 120), brand: String(rec.brand || '').slice(0, 60),
+        kcal: cl(p.kcal, 950), p: cl(p.p, 100), f: cl(p.f, 100), c: cl(p.c, 100), fib: cl(p.fib, 100), sug: cl(p.sug, 100), salt: cl(p.salt, 100),
+        portion: Math.max(1, Math.min(5000, +(rec.portion && rec.portion.g) || 100)), created_by: Supa.user.id, updated_at: new Date().toISOString() }, { onConflict: 'code', ignoreDuplicates: false });
+    } catch (e) { /* не страшно: продукт сохранён у пользователя */ }
+  },
+};
+
+/* ---------- Поиск в интернете: база FORMA (500 000 товаров), затем мировая база Open Food Facts ---------- */
 const OnlineFoods = {
   cache: new Map(), timer: null, seq: 0, calls: [],
   available() { return !IN_FRAME && navigator.onLine !== false; },
   async search(q) {
     const key = norm(q); if (this.cache.has(key)) return this.cache.get(key);
+    let srv = [];
+    try { srv = await ServerFoods.search(q); } catch (e) { /* сервер недоступен — ищем в мировой базе */ }
+    if (srv.length >= 8) { this.cache.set(key, srv); return srv; }
+    let off = [];
+    try { off = await this.offSearch(q); } catch (e) { if (!srv.length) throw e; }
+    const seen = new Set(srv.map((f) => f.barcode));
+    const list = [...srv, ...off.filter((f) => !seen.has(f.barcode))];
+    this.cache.set(key, list); return list;
+  },
+  async offSearch(q) {
     const now = Date.now(); this.calls = this.calls.filter((t) => now - t < 60000);
-    if (this.calls.length >= 9) throw { code: 'rate' }; // лимит базы — 10 запросов в минуту
+    if (this.calls.length >= 9) throw { code: 'rate' }; // лимит мировой базы — 10 запросов в минуту
     this.calls.push(now);
     const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n&fields=code,product_name,product_name_ru,brands,nutriments,serving_quantity&search_terms=' + encodeURIComponent(q);
     const r = await withTimeout(fetch(url), 10000); if (!r.ok) throw { code: 'http' };
     const j = await r.json(); const seen = new Set();
-    const list = (j.products || []).map(offToFood).filter((f) => f && !seen.has(f.name + f.per.kcal) && seen.add(f.name + f.per.kcal));
-    this.cache.set(key, list); return list;
+    return (j.products || []).map(offToFood).filter((f) => f && !seen.has(f.name + f.per.kcal) && seen.add(f.name + f.per.kcal));
   },
   attach(res, q, online) {
     clearTimeout(this.timer); const my = ++this.seq;
     if (!q || norm(q).length < 3 || /^\d+$/.test(q.trim()) || !this.available()) return;
     const box = document.createElement('div'); box.className = 'online-res';
-    box.innerHTML = `<div class="online-h">${ic('search', 14)}В интернете · Open Food Facts</div><p class="muted sm online-st">Ищу…</p>`;
+    box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база · 500 000 товаров</div><p class="muted sm online-st">Ищу…</p>`;
     res.appendChild(box);
     this.timer = setTimeout(async () => {
       try {
         const list = await this.search(q); if (my !== this.seq || !box.isConnected) return;
         list.forEach((f) => online.set(f.id, f));
-        box.innerHTML = `<div class="online-h">${ic('search', 14)}В интернете · Open Food Facts</div>` + (list.length ? list.map((f) => foodRowHTML(f)).join('') + '<p class="muted sm online-st">Данные открытой базы — сверьте с упаковкой. Выбранный продукт сохранится у вас и будет доступен без интернета.</p>' : '<p class="muted sm online-st">В интернете тоже ничего. Попробуйте другое название или создайте продукт.</p>');
+        box.innerHTML = `<div class="online-h">${ic('search', 14)}Большая база · 500 000 товаров</div>` + (list.length ? list.map((f) => foodRowHTML(f)).join('') + '<p class="muted sm online-st">Данные открытой базы — сверьте с упаковкой. Выбранный продукт сохранится у вас и будет доступен без интернета.</p>' : '<p class="muted sm online-st">В интернете тоже ничего. Попробуйте другое название или создайте продукт.</p>');
       } catch (e) {
         if (my !== this.seq || !box.isConnected) return;
         box.querySelector('.online-st').textContent = e && e.code === 'rate' ? 'Слишком много поисков подряд — подождите минуту.' : 'Онлайн-база сейчас не отвечает. Попробуйте позже.';
       }
-    }, 800);
+    }, 500);
   },
 };
 function offToFood(p) {
@@ -766,7 +802,7 @@ function openFoodForm({ food = null, name = '', barcode = '', afterSave = null, 
         if (bc) { const dup = Object.values(D.foods).find((x) => x.barcode === bc && x.id !== (food && !isCopy ? food.cid || food.id : null)); if (dup) { markInvalid(form.barcode, `Этот штрихкод уже у продукта «${dup.name}»`); return; } }
         const id = (food && !isCopy && (food.cid || food.id)) || uid();
         const rec = { kind: 'food', id, name: nm, brand: form.brand.value.trim(), cat: form.cat.value, barcode: bc, per, portion: { g: pg, label: form.pl.value.trim() || 'порция' }, updated: Date.now() };
-        D.foods[id] = rec; persist('food-' + id); invalidateFoods();
+        D.foods[id] = rec; persist('food-' + id); invalidateFoods(); if (bc) ServerFoods.share(rec);
         Sheet.close(); toast('Продукт сохранён'); if (afterSave) afterSave(rec); else render();
       });
     },

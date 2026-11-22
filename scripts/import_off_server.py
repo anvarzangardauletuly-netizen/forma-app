@@ -40,12 +40,13 @@ def convert(r):
             name = clean(r.get(k), 120); break
     if not name:
         name = clean(r.get("product_name") or r.get("generic_name"), 120)
+    name = re.sub(r"[\x00-\x1f\x7f]", " ", name).strip()
     if len(name) < 3 or not READABLE.search(name):
         return None
     code = re.sub(r"\D", "", str(r.get("code") or ""))
     if not (8 <= len(code) <= 14):
         return None
-    brand = clean(str(r.get("brands") or "").split(",")[0], 60)
+    brand = re.sub(r"[\x00-\x1f\x7f]", " ", clean(str(r.get("brands") or "").split(",")[0], 60)).strip()
     fib = max(0.0, num(r.get("fiber_100g")) or 0.0)
     sug = max(0.0, min(ca, num(r.get("sugars_100g")) or 0.0))
     salt = max(0.0, min(100.0, num(r.get("salt_100g")) or 0.0))
